@@ -40,6 +40,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
         path = request.url.path
+        print("AUTH TOKEN", request.headers.get("Authorization"))
         # Skip authentication for excluded paths
         if any(path.startswith(excluded) for excluded in self.exclude_paths):
             response = await call_next(request)
@@ -62,7 +63,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Verify token
         token_data = verify_token(token, token_type="access")
-        
+        print("TOKEN DATA", token_data)
         if not token_data:
             if any(path.startswith(public) for public in self.public_paths):
                 return await call_next(request)

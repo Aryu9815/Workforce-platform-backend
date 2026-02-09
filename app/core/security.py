@@ -1,7 +1,7 @@
 """
 Security utilities for authentication and authorization.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -11,7 +11,7 @@ import uuid
 from app.core.config import settings
 
 # Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 class TokenData(BaseModel):
@@ -29,6 +29,7 @@ class SecurityUtils:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt."""
+        print('pass for hash', password, len(password))
         return pwd_context.hash(password)
     
     @staticmethod
@@ -53,16 +54,18 @@ class SecurityUtils:
         if expires_delta is None:
             expires_delta = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
         
-        expire = datetime.utcnow() + expires_delta
-        
+        expire = datetime.now(timezone.utc) + expires_delta
+        print('EXPIRE', expire.timestamp())
         to_encode = {
             "sub": str(user_id),
             "email": email,
             "tenant_id": str(tenant_id) if tenant_id else None,
             "permissions": permissions or [],
             "type": "access",
-            "exp": expire,
-            "iat": datetime.utcnow(),
+            # "exp": expire,
+            "exp":  int(expire.timestamp()),
+            # "iat": datetime.utcnow(),
+            "iat": int(datetime.utcnow().timestamp()),
             "jti": str(uuid.uuid4())
         }
         
@@ -83,14 +86,16 @@ class SecurityUtils:
         if expires_delta is None:
             expires_delta = timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
         
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
         
         to_encode = {
             "sub": str(user_id),
             "tenant_id": str(tenant_id) if tenant_id else None,
             "type": "refresh",
-            "exp": expire,
-            "iat": datetime.utcnow(),
+            # "exp": expire,
+            "exp":  int(expire.timestamp()),
+            # "iat": datetime.utcnow(),
+            "iat": int(datetime.utcnow().timestamp()),
             "jti": str(uuid.uuid4())
         }
         
@@ -111,24 +116,28 @@ class SecurityUtils:
                 algorithms=[settings.JWT_ALGORITHM]
             )
             return payload
-        except JWTError:
+        except JWTError as error:
+            print('JWT ERROR', error)
             return None
     
     @staticmethod
     def verify_token(token: str, token_type: str = "access") -> Optional[TokenData]:
         """Verify a token and return token data."""
         payload = SecurityUtils.decode_token(token)
-        
+        print('PAYLOAD', payload)
         if payload is None:
+            print('payload none')
             return None
         
         # Check token type
         if payload.get("type") != token_type:
+            print('type none')
             return None
         
         # Check expiration
         exp = payload.get("exp")
         if exp is None or datetime.utcnow() > datetime.fromtimestamp(exp):
+            print('exp none')
             return None
         
         return TokenData(

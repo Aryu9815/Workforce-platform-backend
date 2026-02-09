@@ -48,18 +48,18 @@ class AuthService:
             return None
         
         # Verify password
-        # if not verify_password(password, user.password_hash):
-        #     # Increment failed login attempts
-        #     user.failed_login_attempts += 1
+        if not verify_password(password, user.password_hash):
+            # Increment failed login attempts
+            user.failed_login_attempts += 1
             
-        #     # Lock account after 5 failed attempts
-        #     if user.failed_login_attempts >= 5:
-        #         user.locked_until = datetime.utcnow() + timedelta(minutes=30)
-        #         logger.warning(f"Account locked for user {user.id} due to multiple failed attempts")
+            # Lock account after 5 failed attempts
+            if user.failed_login_attempts >= 5:
+                user.locked_until = datetime.utcnow() + timedelta(minutes=30)
+                logger.warning(f"Account locked for user {user.id} due to multiple failed attempts")
             
-        #     await db.flush()
-        #     logger.warning(f"Authentication failed: Invalid password for user {user.id}")
-        #     return None
+            await db.flush()
+            logger.warning(f"Authentication failed: Invalid password for user {user.id}")
+            return None
         
         # Reset failed login attempts on successful login
         user.failed_login_attempts = 0
@@ -84,15 +84,16 @@ class AuthService:
         existing_user = await self.user_crud.get_by_field(db, field="email", value=email)
         if existing_user:
             raise ValueError(f"User with email {email} already exists")
-        
+        print('PAASDD', password, len(password))
         # Validate password
         if len(password) < settings.PASSWORD_MIN_LENGTH:
             raise ValueError(f"Password must be at least {settings.PASSWORD_MIN_LENGTH} characters")
-        
+        hash_pw = hash_password(password)
+        print('hash', hash_pw)
         # Create user
         user_data = {
             "email": email,
-            "password_hash": hash_password(password),
+            "password_hash": hash_pw,
             "first_name": first_name,
             "last_name": last_name,
             "phone": phone,
@@ -132,7 +133,7 @@ class AuthService:
         refresh_token = RefreshToken(
             user_id=user.id,
             tenant_id=tenant_id,
-            token=access_token[:50],  # Store partial for reference
+            token=access_token,  # Store partial for reference
             refresh_token=refresh_token_str,
             token_expires_at=datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
             refresh_expires_at=datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
