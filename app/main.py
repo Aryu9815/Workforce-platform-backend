@@ -1,0 +1,188 @@
+"""
+Main FastAPI application entry point.
+"""
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import redis.asyncio as redis
+import logging
+
+from app.core.config import settings
+from app.core.logging_config import setup_logging, get_logger
+from app.db.base import db_manager
+from app.events import register_event_handlers
+from app.middleware import (
+    AuthMiddleware,
+    TenantResolutionMiddleware,
+    LoggingMiddleware,
+    RateLimitMiddleware,
+    ErrorHandlerMiddleware,
+    add_exception_handlers,
+)
+from app.api.routes import (
+    auth_router,
+    staff_router,
+    projects_router,
+    tasks_router,
+    attendance_router,
+    inventory_router,
+    reimbursements_router,
+)
+
+# Setup logging
+loggers = setup_logging()
+logger = get_logger(__name__)
+
+
+# Redis client (initialized in lifespan)
+redis_client = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events."""
+    # Startup
+    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    
+    # Initialize database
+    db_manager.init_engine()
+    logger.info("Database engine initialized")
+    
+    # Initialize Redis
+    global redis_client
+    try:
+        redis_client = redis.from_url(
+            str(settings.REDIS_URL),
+            encoding="utf-8",
+            decode_responses=True
+        )
+        await redis_client.ping()
+        logger.info("Redis connection established")
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}. Running without caching.")
+        redis_client = None
+    
+    # Register event handlers
+    register_event_handlers()
+    logger.info("Event handlers registered")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down application")
+    
+    # Close database connections
+    await db_manager.close()
+    logger.info("Database connections closed")
+    
+    # Close Redis connection
+    if redis_client:
+        await redis_client.close()
+        logger.info("Redis connection closed")
+
+
+# Create FastAPI application
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="Multi-Tenant Project, Workforce & Operations Management Platform",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
+    lifespan=lifespan,
+)
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    # allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Tenant-ID", "X-Response-Time", "X-RateLimit-Limit", "X-RateLimit-Remaining"]
+)
+
+# Add custom middleware
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(TenantResolutionMiddleware)
+app.add_middleware(AuthMiddleware)
+app.add_middleware(RateLimitMiddleware, redis_client=redis_client)
+
+# Add exception handlers
+add_exception_handlers(app)
+
+
+# Health check endpoint
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT
+    }
+
+
+# API version prefix
+API_V1_PREFIX = "/api/v1"
+
+# Include routers
+app.include_router(auth_router, prefix=f"{API_V1_PREFIX}")
+app.include_router(staff_router, prefix=f"{API_V1_PREFIX}")
+app.include_router(projects_router, prefix=f"{API_V1_PREFIX}")
+app.include_router(tasks_router, prefix=f"{API_V1_PREFIX}")
+app.include_router(attendance_router, prefix=f"{API_V1_PREFIX}")
+app.include_router(inventory_router, prefix=f"{API_V1_PREFIX}")
+app.include_router(reimbursements_router, prefix=f"{API_V1_PREFIX}")
+
+
+# Dashboard endpoint
+@app.get(f"{API_V1_PREFIX}/dashboard", tags=["Dashboard"])
+async def get_dashboard_stats(request: Request):
+    """Get dashboard statistics."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    # TODO: Calculate actual statistics from database
+    return {
+        "success": True,
+        "data": {
+            "total_staff": 0,
+            "total_projects": 0,
+            "active_tasks": 0,
+            "pending_leaves": 0,
+            "pending_reimbursements": 0,
+            "low_stock_items": 0,
+            "attendance_today": {
+                "present": 0,
+                "absent": 0,
+                "late": 0,
+                "on_leave": 0
+            },
+            "recent_activities": []
+        }
+    }
+
+
+# Root endpoint
+@app.get("/", tags=["Root"])
+async def root():
+    """Root endpoint."""
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "documentation": "/docs" if settings.DEBUG else None,
+        "health": "/health"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower()
+    )

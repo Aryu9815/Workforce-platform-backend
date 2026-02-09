@@ -1,0 +1,349 @@
+"""
+Project management API routes.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
+from uuid import UUID
+
+from app.api.schemas import (
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectResponse,
+    PaginatedResponse,
+    PaginationParams,
+    SuccessResponse
+)
+from app.db.models import Project
+from app.db.base import get_db_session
+from app.services.crud import CRUDService
+from app.events.publisher import EventType, publish_event
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
+router = APIRouter(prefix="/projects", tags=["Project Management"])
+
+project_crud = CRUDService(Project)
+
+
+@router.get("", response_model=PaginatedResponse)
+async def list_projects(
+    request: Request,
+    pagination: PaginationParams = Depends(),
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """List all projects with filtering."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    filters = {}
+    if status:
+        filters["status"] = status
+    if priority:
+        filters["priority"] = priority
+    
+    total = await project_crud.count(db, tenant_id=tenant_id, filters=filters)
+    
+    projects = await project_crud.get_multi(
+        db,
+        skip=pagination.skip,
+        limit=pagination.limit,
+        tenant_id=tenant_id,
+        filters=filters
+    )
+    
+    project_responses = []
+    for project in projects:
+        project_responses.append(ProjectResponse(
+            id=project.id,
+            name=project.name,
+            code=project.code,
+            description=project.description,
+            status=project.status,
+            priority=project.priority,
+            project_type=project.project_type,
+            start_date=project.start_date,
+            end_date=project.end_date,
+            budget=project.budget,
+            currency=project.currency,
+            parent_project_id=project.parent_project_id,
+            client_id=project.client_id,
+            project_manager_id=project.project_manager_id,
+            actual_start_date=project.actual_start_date,
+            actual_end_date=project.actual_end_date,
+            cost_estimate=project.cost_estimate,
+            actual_cost=project.actual_cost,
+            progress_percentage=project.progress_percentage,
+            is_template=project.is_template,
+            deleted_at=project.deleted_at,
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+            manager_name=None  # TODO: Fetch manager name
+        ))
+    
+    return PaginatedResponse.create(
+        items=project_responses,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size
+    )
+
+
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    request: Request,
+    project_data: ProjectCreate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Create a new project."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
+    
+    # Check if project code already exists
+    if project_data.code:
+        existing = await project_crud.get_by_field(
+            db,
+            field="code",
+            value=project_data.code,
+            tenant_id=tenant_id
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Project with this code already exists"
+            )
+    
+    project = await project_crud.create(
+        db,
+        obj_in=project_data.model_dump(),
+        tenant_id=tenant_id
+    )
+    
+    # Publish event
+    await publish_event(
+        event_type=EventType.PROJECT_CREATED,
+        aggregate_type="project",
+        aggregate_id=str(project.id),
+        tenant_id=tenant_id,
+        payload={
+            "name": project.name,
+            "code": project.code,
+            "project_manager_id": str(project.project_manager_id),
+            "created_by": user_id
+        }
+    )
+    
+    logger.info(f"Project created: {project.id}")
+    
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        code=project.code,
+        description=project.description,
+        status=project.status,
+        priority=project.priority,
+        project_type=project.project_type,
+        start_date=project.start_date,
+        end_date=project.end_date,
+        budget=project.budget,
+        currency=project.currency,
+        parent_project_id=project.parent_project_id,
+        client_id=project.client_id,
+        project_manager_id=project.project_manager_id,
+        actual_start_date=project.actual_start_date,
+        actual_end_date=project.actual_end_date,
+        cost_estimate=project.cost_estimate,
+        actual_cost=project.actual_cost,
+        progress_percentage=project.progress_percentage,
+        is_template=project.is_template,
+        deleted_at=project.deleted_at,
+        created_at=project.created_at,
+        updated_at=project.updated_at
+    )
+
+
+@router.get("/{project_id}", response_model=ProjectResponse)
+async def get_project(
+    request: Request,
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get a specific project by ID."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    return ProjectResponse(
+        id=project.id,
+        name=project.name,
+        code=project.code,
+        description=project.description,
+        status=project.status,
+        priority=project.priority,
+        project_type=project.project_type,
+        start_date=project.start_date,
+        end_date=project.end_date,
+        budget=project.budget,
+        currency=project.currency,
+        parent_project_id=project.parent_project_id,
+        client_id=project.client_id,
+        project_manager_id=project.project_manager_id,
+        actual_start_date=project.actual_start_date,
+        actual_end_date=project.actual_end_date,
+        cost_estimate=project.cost_estimate,
+        actual_cost=project.actual_cost,
+        progress_percentage=project.progress_percentage,
+        is_template=project.is_template,
+        deleted_at=project.deleted_at,
+        created_at=project.created_at,
+        updated_at=project.updated_at
+    )
+
+
+@router.put("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    request: Request,
+    project_id: UUID,
+    project_data: ProjectUpdate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Update a project."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
+    
+    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Track if status changed to completed
+    was_completed = project.status != "completed" and project_data.status == "completed"
+    
+    updated_project = await project_crud.update(
+        db,
+        db_obj=project,
+        obj_in=project_data.model_dump(exclude_unset=True)
+    )
+    
+    # Publish event
+    await publish_event(
+        event_type=EventType.PROJECT_UPDATED,
+        aggregate_type="project",
+        aggregate_id=str(updated_project.id),
+        tenant_id=tenant_id,
+        payload={
+            "name": updated_project.name,
+            "status": updated_project.status,
+            "progress": updated_project.progress_percentage,
+            "updated_by": user_id
+        }
+    )
+    
+    logger.info(f"Project updated: {updated_project.id}")
+    
+    return ProjectResponse(
+        id=updated_project.id,
+        name=updated_project.name,
+        code=updated_project.code,
+        description=updated_project.description,
+        status=updated_project.status,
+        priority=updated_project.priority,
+        project_type=updated_project.project_type,
+        start_date=updated_project.start_date,
+        end_date=updated_project.end_date,
+        budget=updated_project.budget,
+        currency=updated_project.currency,
+        parent_project_id=updated_project.parent_project_id,
+        client_id=updated_project.client_id,
+        project_manager_id=updated_project.project_manager_id,
+        actual_start_date=updated_project.actual_start_date,
+        actual_end_date=updated_project.actual_end_date,
+        cost_estimate=updated_project.cost_estimate,
+        actual_cost=updated_project.actual_cost,
+        progress_percentage=updated_project.progress_percentage,
+        is_template=updated_project.is_template,
+        deleted_at=updated_project.deleted_at,
+        created_at=updated_project.created_at,
+        updated_at=updated_project.updated_at
+    )
+
+
+@router.delete("/{project_id}", response_model=SuccessResponse)
+async def delete_project(
+    request: Request,
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Soft delete a project."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
+    
+    project = await project_crud.delete(
+        db,
+        id=project_id,
+        tenant_id=tenant_id,
+        soft=True
+    )
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Publish event
+    await publish_event(
+        event_type=EventType.PROJECT_DELETED,
+        aggregate_type="project",
+        aggregate_id=str(project_id),
+        tenant_id=tenant_id,
+        payload={
+            "name": project.name,
+            "deleted_by": user_id
+        }
+    )
+    
+    logger.info(f"Project deleted: {project_id}")
+    
+    return SuccessResponse(message="Project deleted successfully")
+
+
+@router.get("/{project_id}/stats")
+async def get_project_stats(
+    request: Request,
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get project statistics."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # TODO: Calculate actual statistics
+    return {
+        "project_id": str(project_id),
+        "total_tasks": 0,
+        "completed_tasks": 0,
+        "in_progress_tasks": 0,
+        "overdue_tasks": 0,
+        "total_hours": 0,
+        "budget_utilization": 0,
+        "team_size": 0
+    }
