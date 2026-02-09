@@ -169,6 +169,112 @@ async def create_staff(
     )
 
 
+
+# ============================================
+# Department Routes
+# ============================================
+
+@router.get("/departments", response_model=List[DepartmentResponse])
+async def list_departments(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """List all departments."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    departments = await department_crud.get_multi(
+        db,
+        tenant_id=tenant_id,
+        filters={"is_active": True}
+    )
+    
+    return [
+        DepartmentResponse(
+            id=dept.id,
+            name=dept.name,
+            code=dept.code,
+            description=dept.description,
+            parent_id=dept.parent_id,
+            head_id=dept.head_id,
+            is_active=dept.is_active,
+            created_at=dept.created_at,
+            updated_at=dept.updated_at,
+            staff_count=0  # TODO: Calculate staff count
+        )
+        for dept in departments
+    ]
+
+
+@router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
+async def create_department(
+    request: Request,
+    dept_data: DepartmentCreate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Create a new department."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    department = await department_crud.create(
+        db,
+        obj_in=dept_data.model_dump(),
+        tenant_id=tenant_id
+    )
+    
+    logger.info(f"Department created: {department.id}")
+    
+    return DepartmentResponse(
+        id=department.id,
+        name=department.name,
+        code=department.code,
+        description=department.description,
+        parent_id=department.parent_id,
+        head_id=department.head_id,
+        is_active=department.is_active,
+        created_at=department.created_at,
+        updated_at=department.updated_at,
+        staff_count=0
+    )
+
+
+@router.put("/departments/{department_id}", response_model=DepartmentResponse)
+async def update_department(
+    request: Request,
+    department_id: UUID,
+    dept_data: DepartmentUpdate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Update a department."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    department = await department_crud.get(db, department_id, tenant_id=tenant_id)
+    
+    if not department:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Department not found"
+        )
+    
+    updated_dept = await department_crud.update(
+        db,
+        db_obj=department,
+        obj_in=dept_data.model_dump(exclude_unset=True)
+    )
+    
+    logger.info(f"Department updated: {updated_dept.id}")
+    
+    return DepartmentResponse(
+        id=updated_dept.id,
+        name=updated_dept.name,
+        code=updated_dept.code,
+        description=updated_dept.description,
+        parent_id=updated_dept.parent_id,
+        head_id=updated_dept.head_id,
+        is_active=updated_dept.is_active,
+        created_at=updated_dept.created_at,
+        updated_at=updated_dept.updated_at,
+        staff_count=0
+    )
+
 @router.get("/{staff_id}", response_model=StaffResponse)
 async def get_staff(
     request: Request,
@@ -313,109 +419,3 @@ async def delete_staff(
     logger.info(f"Staff deleted: {staff_id}")
     
     return SuccessResponse(message="Staff member deleted successfully")
-
-
-# ============================================
-# Department Routes
-# ============================================
-
-@router.get("/departments", response_model=List[DepartmentResponse])
-async def list_departments(
-    request: Request,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """List all departments."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
-    departments = await department_crud.get_multi(
-        db,
-        tenant_id=tenant_id,
-        filters={"is_active": True}
-    )
-    
-    return [
-        DepartmentResponse(
-            id=dept.id,
-            name=dept.name,
-            code=dept.code,
-            description=dept.description,
-            parent_id=dept.parent_id,
-            head_id=dept.head_id,
-            is_active=dept.is_active,
-            created_at=dept.created_at,
-            updated_at=dept.updated_at,
-            staff_count=0  # TODO: Calculate staff count
-        )
-        for dept in departments
-    ]
-
-
-@router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
-async def create_department(
-    request: Request,
-    dept_data: DepartmentCreate,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """Create a new department."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
-    department = await department_crud.create(
-        db,
-        obj_in=dept_data.model_dump(),
-        tenant_id=tenant_id
-    )
-    
-    logger.info(f"Department created: {department.id}")
-    
-    return DepartmentResponse(
-        id=department.id,
-        name=department.name,
-        code=department.code,
-        description=department.description,
-        parent_id=department.parent_id,
-        head_id=department.head_id,
-        is_active=department.is_active,
-        created_at=department.created_at,
-        updated_at=department.updated_at,
-        staff_count=0
-    )
-
-
-@router.put("/departments/{department_id}", response_model=DepartmentResponse)
-async def update_department(
-    request: Request,
-    department_id: UUID,
-    dept_data: DepartmentUpdate,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """Update a department."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
-    department = await department_crud.get(db, department_id, tenant_id=tenant_id)
-    
-    if not department:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Department not found"
-        )
-    
-    updated_dept = await department_crud.update(
-        db,
-        db_obj=department,
-        obj_in=dept_data.model_dump(exclude_unset=True)
-    )
-    
-    logger.info(f"Department updated: {updated_dept.id}")
-    
-    return DepartmentResponse(
-        id=updated_dept.id,
-        name=updated_dept.name,
-        code=updated_dept.code,
-        description=updated_dept.description,
-        parent_id=updated_dept.parent_id,
-        head_id=updated_dept.head_id,
-        is_active=updated_dept.is_active,
-        created_at=updated_dept.created_at,
-        updated_at=updated_dept.updated_at,
-        staff_count=0
-    )
