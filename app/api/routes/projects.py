@@ -80,7 +80,7 @@ async def list_projects(
             deleted_at=project.deleted_at,
             created_at=project.created_at,
             updated_at=project.updated_at,
-            manager_name=None  # TODO: Fetch manager name
+            manager_name=None 
         ))
     
     return PaginatedResponse.create(

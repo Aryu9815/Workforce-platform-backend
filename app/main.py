@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import redis.asyncio as redis
 import logging
-
+from starlette.middleware import Middleware
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
 from app.db.base import db_manager
@@ -81,6 +81,20 @@ async def lifespan(app: FastAPI):
         await redis_client.close()
         logger.info("Redis connection closed")
 
+middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    ),
+    Middleware(ErrorHandlerMiddleware),
+    Middleware(LoggingMiddleware),
+    Middleware(TenantResolutionMiddleware),
+    Middleware(AuthMiddleware),
+    Middleware(RateLimitMiddleware),
+]
 
 # Create FastAPI application
 app = FastAPI(
@@ -91,24 +105,8 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
     lifespan=lifespan,
+    middleware=middleware  # Add CORS middleware
 )
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    # allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Tenant-ID", "X-Response-Time", "X-RateLimit-Limit", "X-RateLimit-Remaining"]
-)
-
-# Add custom middleware
-app.add_middleware(ErrorHandlerMiddleware)
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(TenantResolutionMiddleware)
-app.add_middleware(AuthMiddleware)
-app.add_middleware(RateLimitMiddleware, redis_client=redis_client)
 
 # Add exception handlers
 add_exception_handlers(app)

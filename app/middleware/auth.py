@@ -41,6 +41,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         path = request.url.path
         print("AUTH TOKEN", request.headers.get("Authorization"))
+        print("PATH:", request.url.path)
         # Skip authentication for excluded paths
         if any(path.startswith(excluded) for excluded in self.exclude_paths):
             response = await call_next(request)
