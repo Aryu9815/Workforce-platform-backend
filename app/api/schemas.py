@@ -252,6 +252,32 @@ class DepartmentCreate(DepartmentBase):
     pass
 
 
+class DesignationCreate(BaseModel):
+    name: str
+    level: Optional[int] = None
+    department_id: Optional[UUID] = None
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class DesignationUpdate(BaseModel):
+    name: Optional[str] = None
+    level: Optional[int] = None
+    department_id: Optional[UUID] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class DesignationResponse(BaseModel):
+    id: UUID
+    name: str
+    level: Optional[int] = None
+    department_id: Optional[UUID] = None
+    description: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
 class DepartmentUpdate(BaseSchema):
     """Department update schema."""
     name: Optional[str] = None

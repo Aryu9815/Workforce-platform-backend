@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from uuid import UUID
 import logging
-
+from fastapi.security import OAuth2PasswordBearer
+from app.db.base import get_db_session
 from app.db.models import User, RefreshToken, Tenant, TenantUser, TenantUserRole, RolePermission, Permission
 from app.core.security import (
     hash_password,
