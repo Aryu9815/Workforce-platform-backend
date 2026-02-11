@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from uuid import UUID
 import logging
-
-from app.db.models import User, RefreshToken, Tenant, TenantUser, TenantUserRole, RolePermission, Permission
+from app.models.common import User, TenantMaster, RefreshToken
+from app.models.common.tenant_master import TenantMaster
+from app.models.tenant import RefreshToken, TenantUserRole, RolePermission, Permission
 from app.core.security import (
     hash_password,
     verify_password,
@@ -27,6 +28,7 @@ class AuthService:
     
     def __init__(self):
         self.user_crud = CRUDService(User)
+        self.tenant_crud = CRUDService(TenantMaster)
     
     async def authenticate_user(
         self,
@@ -274,28 +276,6 @@ class AuthService:
         
         return permissions
     
-    async def get_user_tenants(
-        self,
-        db: AsyncSession,
-        user_id: str
-    ) -> List[Tuple[str, str, str]]:
-        """Get all tenants for a user."""
-        query = select(TenantUser, Tenant).join(
-            Tenant,
-            TenantUser.tenant_id == Tenant.id
-        ).where(
-            and_(
-                TenantUser.user_id == user_id,
-                Tenant.deleted_at.is_(None)
-            )
-        )
-        
-        result = await db.execute(query)
-        tenants = []
-        for tu, tenant in result.all():
-            tenants.append((str(tenant.id), tenant.name, tenant.slug))
-        
-        return tenants
     
     async def change_password(
         self,
@@ -352,6 +332,19 @@ class AuthService:
         logger.info(f"Password reset for user {user_id}")
         return True
 
+    async def get_user_tenants(
+        self,
+        db: AsyncSession,
+        user_id: str
+    ):        
+        user = await self.user_crud.get(db, user_id)
+        if not user:
+            None
+        tenants = {}
+        for tenant_id in user.tenant_ids:
+            tenants[tenant_id] = await self.tenant_crud.get(db, tenant_id)
+        return tenants
 
+        
 # Global auth service instance
 auth_service = AuthService()

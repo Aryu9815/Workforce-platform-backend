@@ -69,11 +69,13 @@ class PaginatedResponse(BaseSchema):
 
 class TokenResponse(BaseSchema):
     """Token response schema."""
-    access_token: str
-    refresh_token: str
+    access_token: Optional[str]
+    refresh_token: Optional[str]
     token_type: str = "bearer"
-    expires_in: int
+    expires_in: Optional[int]
     tenant_id: Optional[str] = None
+    tenants: Optional[Dict[str, Any]] = None
+    tenant_not_found: bool = False
 
 
 class LoginRequest(BaseSchema):

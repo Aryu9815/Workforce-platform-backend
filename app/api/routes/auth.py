@@ -45,6 +45,15 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
+    if not login_data.tenant_id:
+        tenants = await auth_service.get_user_tenants(db, user.id)
+        if len(tenants)>1:
+            return TokenResponse(
+                tenants=tenants,
+                tenant_not_found=True
+            )
+        else:
+            login_data.tenant_id = list(tenants.keys())[0]
     
     # Get user agent
     user_agent = request.headers.get("User-Agent")
@@ -66,7 +75,6 @@ async def login(
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         tenant_id=login_data.tenant_id
     )
-
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(

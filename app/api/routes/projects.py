@@ -16,14 +16,21 @@ from app.api.schemas import (
 )
 from app.db.models import Project
 from app.db.base import get_db_session
+from app.schemas.project_schemas import ProjectMemberResponse, CreateProjectMember
 from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
+from app.services.projects import ProjectService
+from app.services.team import TeamService
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/projects", tags=["Project Management"])
 
 project_crud = CRUDService(Project)
+project_service = ProjectService()
+team_service = TeamService()
+
+
 
 
 @router.get("", response_model=PaginatedResponse)
@@ -102,23 +109,29 @@ async def create_project(
     user_id = getattr(request.state, 'user_id', None)
     
     # Check if project code already exists
-    if project_data.code:
-        existing = await project_crud.get_by_field(
-            db,
-            field="code",
-            value=project_data.code,
-            tenant_id=tenant_id
-        )
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Project with this code already exists"
-            )
+    # if project_data.code:
+    #     existing = await project_crud.get_by_field(
+    #         db,
+    #         field="code",
+    #         value=project_data.code,
+    #         tenant_id=tenant_id
+    #     )
+    #     if existing:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_409_CONFLICT,
+    #             detail="Project with this code already exists"
+    #         )
     
-    project = await project_crud.create(
+    # project = await project_crud.create(
+    #     db,
+    #     obj_in=project_data.model_dump(),
+    #     tenant_id=tenant_id
+    # )
+    project = await project_service.create_project(
         db,
-        obj_in=project_data.model_dump(),
-        tenant_id=tenant_id
+        data=project_data,
+        tenant_id=tenant_id,
+        user_id=user_id
     )
     
     # Publish event
@@ -161,6 +174,35 @@ async def create_project(
         deleted_at=project.deleted_at,
         created_at=project.created_at,
         updated_at=project.updated_at
+    )
+
+
+@router.post("", response_model=ProjectMemberResponse, status_code=status.HTTP_201_CREATED)
+async def add_project_member(
+    request: Request,
+    project_data: CreateProjectMember,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Create a new project."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    member = await team_service.add_member(
+        db,
+        data=project_data,
+        tenant_id=tenant_id
+    )
+    
+    logger.info(f"Member added to Project: {member.id}")
+    
+    return ProjectMemberResponse(
+        id=member.id,
+        staff_id=member.staff_id,
+        project_id=member.project_id,
+        role=member.role,
+        joined_at=member.joined_at,
+        left_at=member.left_at,
+        created_at=member.created_at,
+        updated_at=member.updated_at
     )
 
 

@@ -14,6 +14,10 @@ from sqlalchemy import event
 import logging
 import time
 from app.core.config import settings
+from app.db.db_connection import get_common_session_maker
+from fastapi import Depends, HTTPException, Request
+
+from app.db.tenant_connection import get_tenant_session
 
 # SQLAlchemy Base
 Base = declarative_base()
@@ -25,18 +29,18 @@ tenant_id_ctx: ContextVar[Optional[str]] = ContextVar("tenant_id", default=None)
 sql_logger = logging.getLogger("sql_logger")
 
 
-class TenantAwareQueryMixin:
-    """Mixin to automatically filter queries by tenant_id."""
+# class TenantAwareQueryMixin:
+#     """Mixin to automatically filter queries by tenant_id."""
     
-    @classmethod
-    def filter_by_tenant(cls, query, tenant_id: Optional[str] = None):
-        """Filter query by tenant_id if the model has tenant_id column."""
-        if hasattr(cls, 'tenant_id'):
-            if tenant_id is None:
-                tenant_id = tenant_id_ctx.get()
-            if tenant_id:
-                return query.filter(cls.tenant_id == tenant_id)
-        return query
+#     @classmethod
+#     def filter_by_tenant(cls, query, tenant_id: Optional[str] = None):
+#         """Filter query by tenant_id if the model has tenant_id column."""
+#         if hasattr(cls, 'tenant_id'):
+#             if tenant_id is None:
+#                 tenant_id = tenant_id_ctx.get()
+#             if tenant_id:
+#                 return query.filter(cls.tenant_id == tenant_id)
+#         return query
 
 
 class DatabaseManager:
@@ -112,25 +116,49 @@ class DatabaseManager:
 db_manager = DatabaseManager()
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Dependency for getting database sessions.
-    Usage: Depends(get_db_session)
-    """
-    async with db_manager.async_session_maker() as session:
+# async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+#     """
+#     Dependency for getting database sessions.
+#     Usage: Depends(get_db_session)
+#     """
+#     async with db_manager.async_session_maker() as session:
+#         try:
+#             yield session
+#             await session.commit()
+#         except Exception:
+#             await session.rollback()
+#             raise
+#         finally:
+#             await session.close()
+
+async def get_common_db(request: Request=None):
+    session_maker = await get_common_session_maker()
+    async with session_maker() as session:
         try:
             yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
         finally:
+            print("Common DB - Session Close - Starting")
             await session.close()
+            print("Common DB - Session Close - Completed")
 
+async def get_db_session(
+    request: Request,
+    common_db: AsyncSession = Depends(get_common_db),
+):
+    tenant_uuid: str = getattr(request.state, "tenant_id", None)
 
-async def get_db() -> AsyncSession:
-    """Get a database session for non-dependency contexts."""
-    return db_manager.async_session_maker()
+    if not tenant_uuid:
+        raise HTTPException(status_code=400, detail="Tenant not resolved")
+
+    async_session_maker = await get_tenant_session(common_db, tenant_uuid)
+
+    async with async_session_maker() as session:
+        try:
+            yield session
+        finally:
+            print("Closing session")
+            await session.close()
+            print("Closed session")
 
 
 def set_tenant_context(tenant_id: str):

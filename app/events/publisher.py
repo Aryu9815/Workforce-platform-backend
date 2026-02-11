@@ -64,7 +64,9 @@ class EventType(str, Enum):
     APPROVAL_REQUESTED = "approval.requested"
     APPROVAL_COMPLETED = "approval.completed"
 
-
+    MEMBER_ADDED = "member.added"
+    MEMBER_REMOVED = "member.removed"
+    
 @dataclass
 class DomainEventData:
     """Domain event data structure."""

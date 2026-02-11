@@ -20,12 +20,15 @@ from app.db.base import get_db_session
 from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
+from app.services.task import TaskService
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/tasks", tags=["Task Management"])
 
 task_crud = CRUDService(Task)
 task_assignee_crud = CRUDService(TaskAssignee)
+task_service = TaskService()
+
 
 
 @router.get("", response_model=PaginatedResponse)
@@ -107,28 +110,13 @@ async def create_task(
     tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    task_data_dict = task_data.model_dump()
-    task_data_dict["created_by"] = user_id
-    
-    task = await task_crud.create(
+    task = await task_service.create_task(
         db,
-        obj_in=task_data_dict,
-        tenant_id=tenant_id
+        tenant_id=tenant_id,
+        user_id=user_id,
+        data=task_data
     )
-    
-    # Create task assignees
-    for assignee_id in task_data.assignee_ids:
-        await task_assignee_crud.create(
-            db,
-            obj_in={
-                "task_id": task.id,
-                "staff_id": assignee_id,
-                "assigned_by": user_id,
-                "is_primary": assignee_id == task_data.assignee_ids[0] if task_data.assignee_ids else False
-            },
-            tenant_id=tenant_id
-        )
-    
+     
     # Publish event
     await publish_event(
         event_type=EventType.TASK_CREATED,

@@ -30,12 +30,6 @@ class SoftDeleteMixin:
     def is_deleted(self):
         return self.deleted_at is not None
 
-
-class TenantMixin:
-    """Mixin for tenant-aware models."""
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-
-
 # ============================================
 # Core Platform Models
 # ============================================
@@ -446,6 +440,33 @@ class WorkflowState(Base):
     time_limit_hours = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class WorkflowTransitions(Base):
+    """Workflow state definitions."""
+    __tablename__ = "workflow_transitions"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    workflow_id = Column(UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    from_state_id = Column(UUID(as_uuid=True), ForeignKey("workflow_states.id", ondelete="CASCADE"), nullable=False)
+    to_state_id = Column(UUID(as_uuid=True), ForeignKey("workflow_states.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    request_approval = Column(Boolean, default=False)
+    approval_flow_id = Column(UUID(as_uuid=True), ForeignKey("approval_flows.id", ondelete="CASCADE"), nullable=False)
+    auto_transition = Column(Boolean, default=False)
+    condition_rules = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class TransitionsRules(Base):
+    """Workflow state definitions."""
+    __tablename__ = "transition_rules"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    transition_id = Column(UUID(as_uuid=True), ForeignKey("workflow_transitions.id", ondelete="CASCADE"), nullable=False)
+    rule_type = Column(String(50), nullable=False)
+    rule_config = Column(JSONB, nullable=False)
+    error_message = Column(String(255), nullable=True)
 
 class Status(Base):
     """Status definitions for entities."""
@@ -496,29 +517,25 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
     template_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
 
 
-class ProjectMember(Base):
+class ProjectMember(Base, TenantMixin, SoftDeleteMixin, TimestampMixin):
     """Project membership."""
     __tablename__ = "project_members"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
     role = Column(String(100), nullable=True)
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
     left_at = Column(DateTime(timezone=True), nullable=True)
     permissions = Column(JSONB, default=list)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    __table_args__ = (UniqueConstraint("tenant_id", "project_id", "staff_id"),)
+    is_removed = Column(Boolean, default=False)
 
 
-class Task(Base, TimestampMixin, SoftDeleteMixin):
+class Task(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     """Task model."""
     __tablename__ = "tasks"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     parent_task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     title = Column(String(500), nullable=False)
@@ -742,12 +759,11 @@ class InventoryStock(Base, TimestampMixin):
     __table_args__ = (UniqueConstraint("tenant_id", "item_id", "location_id"),)
 
 
-class InventoryTransaction(Base):
+class InventoryTransaction(Base, TimestampMixin, SoftDeleteMixin, TenantMixin):
     """Inventory transaction history."""
     __tablename__ = "inventory_transactions"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     transaction_number = Column(String(50), unique=True, nullable=False)
     item_id = Column(UUID(as_uuid=True), ForeignKey("inventory_items.id", ondelete="CASCADE"), nullable=False)
     location_id = Column(UUID(as_uuid=True), ForeignKey("inventory_locations.id", ondelete="CASCADE"), nullable=False)
@@ -765,6 +781,70 @@ class InventoryTransaction(Base):
     transaction_date = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
+# ============================================
+# Approvals Models
+# ============================================
+
+class ApprovalFlow(Base, TenantMixin,TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "approval_flows"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    entity_type = Column(String(50), nullable=False)
+    is_default = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    conditions = Column(JSONB)  # auto-assignment rules
+
+class ApprovalStep(Base,TenantMixin, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "approval_steps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    flow_id = Column(UUID(as_uuid=True), ForeignKey("approval_flows.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer, nullable=False)
+    approver_type = Column(String(30), nullable=False)  # user / role / manager / department_head
+    approver_id = Column(UUID(as_uuid=True)) 
+    approver_role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="SET NULL"))
+    is_parallel = Column(Boolean, default=False)
+    minimum_approvals = Column(Integer, default=1)
+    sla_hours = Column(Integer)
+    escalation_step_id = Column(UUID(as_uuid=True), ForeignKey("approval_steps.id", ondelete="SET NULL"))
+    conditions = Column(JSONB)  
+    
+
+class ApprovalInstance(Base, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "approval_instances"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    flow_id = Column(UUID(as_uuid=True), ForeignKey("approval_flows.id", ondelete="CASCADE"), nullable=False)
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(UUID(as_uuid=True), nullable=False)
+    requester_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    status = Column(String(20), default="pending") # pending / approved / rejected / escalated / in_progress
+    current_step_id = Column(UUID(as_uuid=True), ForeignKey("approval_steps.id", ondelete="SET NULL"))
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    final_decision = Column(String(20))  
+    comments = Column(Text)
+
+class ApprovalAssignment(Base, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "approval_assignments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    instance_id = Column(UUID(as_uuid=True), ForeignKey("approval_instances.id", ondelete="CASCADE"), nullable=False)
+    step_id = Column(UUID(as_uuid=True), ForeignKey("approval_steps.id", ondelete="CASCADE"), nullable=False)
+    approver_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="pending") # pending / approved / rejected
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    due_at = Column(DateTime)
+    decided_at = Column(DateTime)
+    comments = Column(Text)
+    delegated_from = Column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 # ============================================
 # File Management Models
