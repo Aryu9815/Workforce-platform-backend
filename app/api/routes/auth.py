@@ -17,7 +17,7 @@ from app.api.schemas import (
     SuccessResponse
 )
 from app.services.auth import auth_service
-from app.db.base import get_db_session
+from app.db.base import get_db_session , get_common_db
 from app.core.config import settings
 from app.core.logging_config import get_logger
 
@@ -30,7 +30,7 @@ security = HTTPBearer()
 async def login(
     request: Request,
     login_data: LoginRequest,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Authenticate user and return tokens."""
     # Authenticate user
@@ -80,7 +80,7 @@ async def login(
 async def register(
     request: Request,
     register_data: RegisterRequest,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Register a new user."""
     try:
@@ -119,7 +119,7 @@ async def register(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Refresh access token using refresh token."""
     result = await auth_service.refresh_access_token(
@@ -147,7 +147,7 @@ async def refresh_token(
 @router.post("/logout", response_model=SuccessResponse)
 async def logout(
     refresh_data: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Logout user by revoking refresh token."""
     success = await auth_service.revoke_refresh_token(
@@ -165,7 +165,7 @@ async def logout(
 async def change_password(
     request: Request,
     password_data: ChangePasswordRequest,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Change user password."""
     user_id = getattr(request.state, 'user_id', None)
@@ -202,7 +202,7 @@ async def change_password(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
     request: Request,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Get current authenticated user details."""
     user_id = getattr(request.state, 'user_id', None)
@@ -239,7 +239,7 @@ async def get_current_user(
 @router.get("/tenants", response_model=List[TenantListResponse])
 async def get_user_tenants(
     request: Request,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Get all tenants for the current user."""
     user_id = getattr(request.state, 'user_id', None)
@@ -268,7 +268,7 @@ async def get_user_tenants(
 async def switch_tenant(
     request: Request,
     tenant_id: str,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Switch to a different tenant and get new tokens."""
     user_id = getattr(request.state, 'user_id', None)
