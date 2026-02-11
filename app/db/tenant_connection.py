@@ -49,7 +49,7 @@ async def get_tenant_session(db: AsyncSession, tenant_uuid: str) -> Callable[...
     # If not in cache, fetch tenant configuration (outside lock to avoid blocking)
     tenant = await db.execute(
         select(TenantConfiguration).filter(
-            TenantConfiguration.tenant_uuid == str(tenant_uuid),
+            TenantConfiguration.tenant_id == str(tenant_uuid),
             TenantConfiguration.is_active == True,
         )
     )
