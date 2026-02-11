@@ -5,8 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
-
+from app.middleware.auth import AuthMiddleware
 from app.api.schemas import (
+    DesignationCreate,
+    DesignationResponse,
+    DesignationUpdate,
     StaffCreate,
     StaffUpdate,
     StaffResponse,
@@ -32,7 +35,10 @@ staff_crud = CRUDService(StaffProfile)
 department_crud = CRUDService(Department)
 designation_crud = CRUDService(Designation)
 
-
+def get_department( db: AsyncSession, department_id: UUID, tenant_id: UUID):
+    return department_crud.get(db, department_id, tenant_id=tenant_id)
+def get_designation(db: AsyncSession, designation_id: UUID, tenant_id: UUID):
+    return designation_crud.get(db, designation_id, tenant_id=tenant_id)
 @router.get("", response_model=PaginatedResponse)
 async def list_staff(
     request: Request,
@@ -64,6 +70,10 @@ async def list_staff(
     # Convert to response schema
     staff_responses = []
     for staff in staff_list:
+        department = await get_department(db, staff.department_id, tenant_id) if staff.department_id else None
+        designation = await get_designation(db, staff.designation_id, tenant_id) if staff.designation_id else None
+        department_name = department.name if department else None
+        designation_name = designation.name if designation else None
         staff_responses.append(StaffResponse(
             id=staff.id,
             employee_code=staff.employee_code,
@@ -85,8 +95,8 @@ async def list_staff(
             full_name=f"{staff.first_name} {staff.last_name}",
             created_at=staff.created_at,
             updated_at=staff.updated_at,
-            department_name=None,  # TODO: Fetch department name
-            designation_name=None  # TODO: Fetch designation name
+            department_name= department_name ,  # TODO: Fetch department name
+            designation_name=designation_name  # TODO: Fetch designation name
         ))
     
     return PaginatedResponse.create(
@@ -96,15 +106,29 @@ async def list_staff(
         page_size=pagination.page_size
     )
 
+def require_auth_context(request: Request):
+    if not getattr(request.state, "user_id", None):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return request
 
 @router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)
 async def create_staff(
-    request: Request,
-    staff_data: StaffCreate,
-    db: AsyncSession = Depends(get_db_session)
+    request: Request ,
+    staff_data: StaffCreate ,
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new staff member."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
+    logger.info(f"Creating staff with data: {staff_data}")
+    print(f"Creating staff with data: {staff_data}")
+    # tenant_id = getattr(request.state, 'tenant_id', None)
+    tenant_id ="11111111-1111-1111-1111-111111111111"
+    print(f"Tenant ID from request state: {tenant_id}")
+    if not tenant_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Tenant context missing"
+        )
+
     user_id = getattr(request.state, 'user_id', None)
     
     # Check if email already exists in tenant
@@ -138,11 +162,18 @@ async def create_staff(
             "employee_code": staff.employee_code,
             "email": staff.email,
             "name": f"{staff.first_name} {staff.last_name}",
-            "department_id": str(staff.department_id),
+            "department_id": str(staff.department_id)if staff.department_id else None,
             "created_by": user_id
         }
     )
-    
+    department_crud = CRUDService(Department)
+    designation_crud = CRUDService(Designation)
+    department =  await department_crud.get(db, staff.department_id, tenant_id=tenant_id) if staff.department_id else None
+    designation = await designation_crud.get(db, staff.designation_id, tenant_id=tenant_id) if staff.designation_id else None
+    staff.department_name =  department.name if department else None
+    staff.designation_name = designation.name if designation else None
+    print(f"Staff created with ID: {staff.id}, Department: {staff.department_name}, Designation: {staff.designation_name}")
+
     logger.info(f"Staff created: {staff.id}")
     
     return StaffResponse(
@@ -154,6 +185,8 @@ async def create_staff(
         phone=staff.phone,
         department_id=staff.department_id,
         designation_id=staff.designation_id,
+        department_name=staff.department_name,
+        designation_name=staff.designation_name,
         reporting_manager_id=staff.reporting_manager_id,
         employment_type=staff.employment_type,
         join_date=staff.join_date,
@@ -233,6 +266,106 @@ async def create_department(
         created_at=department.created_at,
         updated_at=department.updated_at,
         staff_count=0
+    )
+
+# ============================================
+# Designation Routes
+# ============================================
+
+@router.get("/designations", response_model=List[DesignationResponse])
+async def list_designations(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session)
+):
+    tenant_id = getattr(request.state, 'tenant_id', None)
+
+    designations = await designation_crud.get_multi(
+        db,
+        tenant_id=tenant_id,
+        filters={"is_active": True} , 
+        order_by="name"
+    )
+
+    return [
+        DesignationResponse(
+            id=d.id,
+            name=d.name,
+            level=d.level,
+            department_id=d.department_id,
+            description=d.description,
+            is_active=d.is_active,
+            created_at=d.created_at,
+            updated_at=d.updated_at
+        )
+        for d in designations
+    ]
+@router.post(
+    "/designations",
+    response_model=DesignationResponse,
+    status_code=status.HTTP_201_CREATED
+)
+async def create_designation(
+    request: Request,
+    designation_data: DesignationCreate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    logger.info(f"Creating designation with data: {designation_data}")  
+    print(f"Creating designation with data: {designation_data}")
+    tenant_id = getattr(request.state, 'tenant_id', None)
+
+    designation = await designation_crud.create(
+        db,
+        obj_in=designation_data.model_dump(),
+        tenant_id=tenant_id
+    )
+
+    return DesignationResponse(
+        id=designation.id,
+        name=designation.name,
+        level=designation.level,
+        department_id=designation.department_id,
+        description=designation.description,
+        is_active=designation.is_active,
+        created_at=designation.created_at,
+        updated_at=designation.updated_at
+    )
+
+@router.put("/designations/{designation_id}", response_model=DesignationResponse)
+async def update_designation(
+    request: Request,
+    designation_id: UUID,
+    designation_data: DesignationUpdate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    if designation_data.department_id:
+        designation = await designation_crud.get(
+            db,
+            designation_id,
+            tenant_id=tenant_id
+        )
+
+        if not designation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Designation not found"
+            )
+
+    updated = await designation_crud.update(
+        db,
+        db_obj=designation,
+        obj_in=designation_data.model_dump(exclude_unset=True)
+    )
+
+    return DesignationResponse(
+        id=updated.id,
+        name=updated.name,
+        level=updated.level,
+        department_id=updated.department_id,
+        description=updated.description,
+        is_active=updated.is_active,
+        created_at=updated.created_at,
+        updated_at=updated.updated_at
     )
 
 
