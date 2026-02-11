@@ -13,8 +13,8 @@ import uuid
 
 class TenantMaster(CommonBase):
     __tablename__ = "tenant_master"
-
-    tenant_uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    tenant_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_name = Column(String(255), nullable=False, unique=True)
     contact_person = Column(String(255))
     email = Column(String(255), unique=True)
