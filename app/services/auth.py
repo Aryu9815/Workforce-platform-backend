@@ -115,14 +115,14 @@ class AuthService:
     ) -> Tuple[str, str]:
         """Create access and refresh tokens for a user."""
         # Get user permissions
-        permissions = await self.get_user_permissions(db, user.id, tenant_id)
+        # permissions = await self.get_user_permissions(db, user.id, tenant_id)
         
         # Create tokens
         access_token = create_access_token(
             user_id=str(user.id),
             email=user.email,
             tenant_id=tenant_id,
-            permissions=permissions
+            # permissions=permissions
         )
         
         refresh_token_str = create_refresh_token(
