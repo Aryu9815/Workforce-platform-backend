@@ -30,4 +30,3 @@ class TenantUser(TenantBase, TenantScopedMixin):
     department_id = Column(UUID(as_uuid=True), nullable=True)
     settings = Column(JSONB, default=dict)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "user_id"),)

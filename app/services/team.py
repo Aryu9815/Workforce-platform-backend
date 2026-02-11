@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import uuid4
-from app.db.models import ProjectMember
+from app.models.tenant import ProjectMember
 from app.schemas.project_schemas import ProjectMemberBase, CreateProjectMember
 from app.services.crud import CRUDService
 

@@ -18,7 +18,7 @@ from app.api.schemas import (
     PaginationParams,
     SuccessResponse
 )
-from app.db.models import AttendanceRecord, LeaveRequest, LeaveType
+from app.models.tenant import AttendanceRecord, LeaveRequest, LeaveType
 from app.db.base import get_db_session
 from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event

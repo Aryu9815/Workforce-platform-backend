@@ -9,7 +9,7 @@ import logging
 from dataclasses import dataclass
 import json
 
-from app.db.models import DomainEvent
+from app.models.tenant import DomainEvent
 from app.core.logging_config import get_logger
 
 logger = get_logger("events")

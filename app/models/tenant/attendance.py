@@ -66,8 +66,6 @@ class AttendanceRecord(TenantBase, TenantScopedMixin):
     is_manual_entry = Column(Boolean, default=False)
     approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "staff_id", "date"),)
-
 
 class LeaveType(TenantBase, TenantScopedMixin):
     """Leave type definitions."""

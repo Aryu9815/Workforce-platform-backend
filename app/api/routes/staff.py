@@ -20,7 +20,7 @@ from app.api.schemas import (
     PaginationParams,
     SuccessResponse
 )
-from app.db.models import StaffProfile, Department, Designation
+from app.models.tenant import StaffProfile, Department, Designation
 from app.db.base import get_db_session
 from app.services.crud import CRUDService
 from app.services.auth import auth_service

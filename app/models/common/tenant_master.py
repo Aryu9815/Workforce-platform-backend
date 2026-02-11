@@ -9,13 +9,12 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from app.db.db_connection import CommonBase
-
+import uuid
 
 class TenantMaster(CommonBase):
     __tablename__ = "tenant_master"
 
-    tenant_id = Column(Integer, primary_key=True, autoincrement=True)
-    tenant_uuid = Column(UUID(as_uuid=True), nullable=False, unique=True)
+    tenant_uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_name = Column(String(255), nullable=False, unique=True)
     contact_person = Column(String(255))
     email = Column(String(255), unique=True)

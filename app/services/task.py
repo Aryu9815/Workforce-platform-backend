@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import uuid4
 from typing import List, Optional
-from app.db.models import Task, TaskAssignee, TaskComment, TaskDependency
+from app.models.tenant import Task, TaskAssignee, TaskComment, TaskDependency, Project
 from app.services.workflow import WorkflowService
 from app.services.team import TeamService
 from app.schemas.task_schemas import TaskCreate, TaskUpdate

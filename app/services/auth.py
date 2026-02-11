@@ -8,8 +8,7 @@ from sqlalchemy import select, and_
 from uuid import UUID
 import logging
 from app.models.common import User, TenantMaster, RefreshToken
-from app.models.common.tenant_master import TenantMaster
-from app.models.tenant import RefreshToken, TenantUserRole, RolePermission, Permission
+from app.models.tenant import TenantUserRole, RolePermission, Permission
 from app.core.security import (
     hash_password,
     verify_password,

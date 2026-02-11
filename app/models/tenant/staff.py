@@ -65,8 +65,6 @@ class StaffProfile(TenantBase, TenantScopedMixin):
     documents = Column(JSONB, default=list)
     custom_fields = Column(JSONB, default=dict)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "employee_code"),)
-
 
 class StaffAssignment(TenantBase, TenantScopedMixin):
     """Staff project assignments."""

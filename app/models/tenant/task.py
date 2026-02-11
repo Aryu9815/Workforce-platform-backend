@@ -54,7 +54,6 @@ class TaskAssignee(TenantBase, TenantScopedMixin):
     is_primary = Column(Boolean, default=False)
     allocation_percentage = Column(Integer, default=100)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "task_id", "staff_id"),)
 
 
 class TaskDependency(TenantBase, TenantScopedMixin):
@@ -67,8 +66,6 @@ class TaskDependency(TenantBase, TenantScopedMixin):
     dependency_type = Column(String(20), default="finish_to_start")
     lag_days = Column(Integer, default=0)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "task_id", "depends_on_task_id"),)
-
 
 class TaskComment(TenantBase, TenantScopedMixin):
     """Task comments."""

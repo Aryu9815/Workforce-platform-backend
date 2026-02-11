@@ -14,7 +14,7 @@ from app.api.schemas import (
     PaginationParams,
     SuccessResponse
 )
-from app.db.models import Project
+from app.models.tenant import Project
 from app.db.base import get_db_session
 from app.schemas.project_schemas import ProjectMemberResponse, CreateProjectMember
 from app.services.crud import CRUDService

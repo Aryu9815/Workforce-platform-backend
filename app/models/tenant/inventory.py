@@ -58,7 +58,6 @@ class InventoryItem(TenantBase, TenantScopedMixin):
     is_consumable = Column(Boolean, default=True)
     custom_fields = Column(JSONB, default=dict)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "sku"),)
 
 
 class InventoryStock(TenantBase, TenantScopedMixin):
@@ -73,7 +72,6 @@ class InventoryStock(TenantBase, TenantScopedMixin):
     average_cost = Column(Numeric(12, 2), nullable=True)
     last_movement_at = Column(DateTime(timezone=True), nullable=True)
     
-    __table_args__ = (UniqueConstraint("tenant_id", "item_id", "location_id"),)
 
 
 class InventoryTransaction(TenantBase, TenantScopedMixin):

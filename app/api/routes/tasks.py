@@ -15,7 +15,7 @@ from app.api.schemas import (
     PaginationParams,
     SuccessResponse
 )
-from app.db.models import Task, TaskAssignee
+from app.models.tenant import Task, TaskAssignee
 from app.db.base import get_db_session
 from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event

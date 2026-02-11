@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import uuid4
 from typing import List, Optional
-from app.db.models import Project, ProjectMember, Workflow
+from app.models.tenant import Project, ProjectMember, Workflow
 from app.services.workflow import WorkflowService
 from app.services.team import TeamService
 from app.schemas.project_schemas import ProjectCreate, CreateProjectMember
