@@ -182,114 +182,114 @@ class TenantListResponse(BaseSchema):
 # Staff Schemas
 # ============================================
 
-class StaffBase(BaseSchema):
-    """Base staff schema."""
-    employee_code: Optional[str] = None
-    first_name: str = Field(..., min_length=1, max_length=100)
-    last_name: str = Field(..., min_length=1, max_length=100)
-    email: EmailStr
-    phone: Optional[str] = None
-    department_id: UUID
-    designation_id: UUID
-    reporting_manager_id: Optional[UUID] = None
-    employment_type: str = "full_time"
-    join_date: date
-    work_location: Optional[str] = None
+# class StaffBase(BaseSchema):
+#     """Base staff schema."""
+#     employee_code: Optional[str] = None
+#     first_name: str = Field(..., min_length=1, max_length=100)
+#     last_name: str = Field(..., min_length=1, max_length=100)
+#     email: EmailStr
+#     phone: Optional[str] = None
+#     department_id: UUID
+#     designation_id: UUID
+#     reporting_manager_id: Optional[UUID] = None
+#     employment_type: str = "full_time"
+#     join_date: date
+#     work_location: Optional[str] = None
 
 
-class StaffCreate(StaffBase):
-    """Staff creation schema."""
-    skills: List[str] = []
-    certifications: List[Dict[str, Any]] = []
-    emergency_contact: Optional[Dict[str, Any]] = None
-    custom_fields: Optional[Dict[str, Any]] = None
+# class StaffCreate(StaffBase):
+#     """Staff creation schema."""
+#     skills: List[str] = []
+#     certifications: List[Dict[str, Any]] = []
+#     emergency_contact: Optional[Dict[str, Any]] = None
+#     custom_fields: Optional[Dict[str, Any]] = None
 
 
-class StaffUpdate(BaseSchema):
-    """Staff update schema."""
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    phone: Optional[str] = None
-    department_id: Optional[UUID] = None
-    designation_id: Optional[UUID] = None
-    reporting_manager_id: Optional[UUID] = None
-    employment_type: Optional[str] = None
-    work_location: Optional[str] = None
-    skills: Optional[List[str]] = None
-    is_active: Optional[bool] = None
+# class StaffUpdate(BaseSchema):
+#     """Staff update schema."""
+#     first_name: Optional[str] = None
+#     last_name: Optional[str] = None
+#     phone: Optional[str] = None
+#     department_id: Optional[UUID] = None
+#     designation_id: Optional[UUID] = None
+#     reporting_manager_id: Optional[UUID] = None
+#     employment_type: Optional[str] = None
+#     work_location: Optional[str] = None
+#     skills: Optional[List[str]] = None
+#     is_active: Optional[bool] = None
 
 
-class StaffResponse(StaffBase, TimestampSchema):
-    """Staff response schema."""
-    id: UUID
-    user_id: Optional[UUID] = None
-    exit_date: Optional[date] = None
-    exit_reason: Optional[str] = None
-    skills: List[str]
-    is_active: bool
-    full_name: str
-    department_name: Optional[str] = None
-    designation_name: Optional[str] = None
+# class StaffResponse(StaffBase, TimestampSchema):
+#     """Staff response schema."""
+#     id: UUID
+#     user_id: Optional[UUID] = None
+#     exit_date: Optional[date] = None
+#     exit_reason: Optional[str] = None
+#     skills: List[str]
+#     is_active: bool
+#     full_name: str
+#     department_name: Optional[str] = None
+#     designation_name: Optional[str] = None
 
 
-# ============================================
-# Department Schemas
-# ============================================
+# # ============================================
+# # Department Schemas
+# # ============================================
 
-class DepartmentBase(BaseSchema):
-    """Base department schema."""
-    name: str = Field(..., min_length=1, max_length=100)
-    code: Optional[str] = Field(None, max_length=20)
-    description: Optional[str] = None
-    parent_id: Optional[UUID] = None
-
-
-class DepartmentCreate(DepartmentBase):
-    """Department creation schema."""
-    pass
+# class DepartmentBase(BaseSchema):
+#     """Base department schema."""
+#     name: str = Field(..., min_length=1, max_length=100)
+#     code: Optional[str] = Field(None, max_length=20)
+#     description: Optional[str] = None
+#     parent_id: Optional[UUID] = None
 
 
-class DesignationCreate(BaseModel):
-    name: str
-    level: Optional[int] = None
-    department_id: Optional[UUID] = None
-    description: Optional[str] = None
-    is_active: bool = True
+# class DepartmentCreate(DepartmentBase):
+#     """Department creation schema."""
+#     pass
 
 
-class DesignationUpdate(BaseModel):
-    name: Optional[str] = None
-    level: Optional[int] = None
-    department_id: Optional[UUID] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
+# class DesignationCreate(BaseModel):
+#     name: str
+#     level: Optional[int] = None
+#     department_id: Optional[UUID] = None
+#     description: Optional[str] = None
+#     is_active: bool = True
 
 
-class DesignationResponse(BaseModel):
-    id: UUID
-    name: str
-    level: Optional[int] = None
-    department_id: Optional[UUID] = None
-    description: Optional[str] = None
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-
-class DepartmentUpdate(BaseSchema):
-    """Department update schema."""
-    name: Optional[str] = None
-    code: Optional[str] = None
-    description: Optional[str] = None
-    head_id: Optional[UUID] = None
-    is_active: Optional[bool] = None
+# class DesignationUpdate(BaseModel):
+#     name: Optional[str] = None
+#     level: Optional[int] = None
+#     department_id: Optional[UUID] = None
+#     description: Optional[str] = None
+#     is_active: Optional[bool] = None
 
 
-class DepartmentResponse(DepartmentBase, TimestampSchema):
-    """Department response schema."""
-    id: UUID
-    head_id: Optional[UUID] = None
-    is_active: bool
-    staff_count: int = 0
+# class DesignationResponse(BaseModel):
+#     id: UUID
+#     name: str
+#     level: Optional[int] = None
+#     department_id: Optional[UUID] = None
+#     description: Optional[str] = None
+#     is_active: bool
+#     created_at: datetime
+#     updated_at: datetime
+
+# class DepartmentUpdate(BaseSchema):
+#     """Department update schema."""
+#     name: Optional[str] = None
+#     code: Optional[str] = None
+#     description: Optional[str] = None
+#     head_id: Optional[UUID] = None
+#     is_active: Optional[bool] = None
+
+
+# class DepartmentResponse(DepartmentBase, TimestampSchema):
+#     """Department response schema."""
+#     id: UUID
+#     head_id: Optional[UUID] = None
+#     is_active: bool
+#     staff_count: int = 0
 
 
 # ============================================

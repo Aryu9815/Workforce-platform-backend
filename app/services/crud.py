@@ -36,21 +36,21 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self.create_schema = create_schema
         self.update_schema = update_schema
     
-    def _get_tenant_filter(self, tenant_id: Optional[str] = None) -> Any:
-        """Get tenant filter condition if model has tenant_id."""
-        if hasattr(self.model, 'tenant_id'):
-            if tenant_id is None:
-                tenant_id = get_tenant_context()
-            if tenant_id:
-                return self.model.tenant_id == tenant_id
-        return None
+    # def _get_tenant_filter(self, tenant_id: Optional[str] = None) -> Any:
+    #     """Get tenant filter condition if model has tenant_id."""
+    #     if hasattr(self.model, 'tenant_id'):
+    #         if tenant_id is None:
+    #             tenant_id = get_tenant_context()
+    #         if tenant_id:
+    #             return self.model.tenant_id == tenant_id
+    #     return None
     
-    def _apply_tenant_filter(self, query, tenant_id: Optional[str] = None):
-        """Apply tenant filter to query."""
-        tenant_filter = self._get_tenant_filter(tenant_id)
-        if tenant_filter is not None:
-            query = query.where(tenant_filter)
-        return query
+    # def _apply_tenant_filter(self, query, tenant_id: Optional[str] = None):
+    #     """Apply tenant filter to query."""
+    #     tenant_filter = self._get_tenant_filter(tenant_id)
+    #     if tenant_filter is not None:
+    #         query = query.where(tenant_filter)
+    #     return query
     
     def _apply_soft_delete_filter(self, query, include_deleted: bool = False):
         """Apply soft delete filter to query."""
@@ -62,12 +62,11 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self,
         db: AsyncSession,
         id: Union[str, UUID],
-        tenant_id: Optional[str] = None,
+         
         include_deleted: bool = False
     ) -> Optional[ModelType]:
         """Get a single record by ID."""
         query = select(self.model).where(self.model.id == id)
-        query = self._apply_tenant_filter(query, tenant_id)
         query = self._apply_soft_delete_filter(query, include_deleted)
         
         result = await db.execute(query)
@@ -79,14 +78,13 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         skip: int = 0,
         limit: int = 20,
-        tenant_id: Optional[str] = None,
+         
         include_deleted: bool = False,
         order_by: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None
     ) -> List[ModelType]:
         """Get multiple records with pagination."""
         query = select(self.model)
-        query = self._apply_tenant_filter(query, tenant_id)
         query = self._apply_soft_delete_filter(query, include_deleted)
         
         # Apply additional filters
@@ -110,13 +108,12 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def count(
         self,
         db: AsyncSession,
-        tenant_id: Optional[str] = None,
+         
         include_deleted: bool = False,
         filters: Optional[Dict[str, Any]] = None
     ) -> int:
         """Count records."""
         query = select(func.count(self.model.id))
-        query = self._apply_tenant_filter(query, tenant_id)
         query = self._apply_soft_delete_filter(query, include_deleted)
         
         # Apply additional filters
@@ -159,7 +156,6 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         objs_in: List[Union[CreateSchemaType, Dict[str, Any]]],
-        tenant_id: Optional[str] = None
     ) -> List[ModelType]:
         """Create multiple records."""
         db_objs = []
@@ -170,8 +166,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             else:
                 obj_data = obj_in.model_dump(exclude_unset=True)
             
-            if hasattr(self.model, 'tenant_id') and tenant_id:
-                obj_data['tenant_id'] = tenant_id
+            
             
             db_objs.append(self.model(**obj_data))
         
@@ -216,10 +211,9 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         id: Union[str, UUID],
         obj_in: Union[UpdateSchemaType, Dict[str, Any]],
-        tenant_id: Optional[str] = None
     ) -> Optional[ModelType]:
         """Update a record by ID."""
-        db_obj = await self.get(db, id, tenant_id=tenant_id)
+        db_obj = await self.get(db, id)
         if not db_obj:
             return None
         return await self.update(db, db_obj=db_obj, obj_in=obj_in)
@@ -229,11 +223,11 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         id: Union[str, UUID],
-        tenant_id: Optional[str] = None,
+         
         soft: bool = True
     ) -> Optional[ModelType]:
         """Delete a record (soft or hard delete)."""
-        db_obj = await self.get(db, id, tenant_id=tenant_id, include_deleted=True)
+        db_obj = await self.get(db, id, include_deleted=True)
         
         if not db_obj:
             return None
@@ -257,10 +251,9 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         id: Union[str, UUID],
-        tenant_id: Optional[str] = None
     ) -> Optional[ModelType]:
         """Restore a soft-deleted record."""
-        db_obj = await self.get(db, id, tenant_id=tenant_id, include_deleted=True)
+        db_obj = await self.get(db, id, include_deleted=True)
         
         if not db_obj or not hasattr(db_obj, 'deleted_at'):
             return None
@@ -278,11 +271,9 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         id: Union[str, UUID],
-        tenant_id: Optional[str] = None
     ) -> bool:
         """Check if a record exists."""
         query = select(self.model.id).where(self.model.id == id)
-        query = self._apply_tenant_filter(query, tenant_id)
         query = self._apply_soft_delete_filter(query, include_deleted=False)
         
         result = await db.execute(query)
@@ -294,7 +285,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         field: str,
         value: Any,
-        tenant_id: Optional[str] = None,
+         
         include_deleted: bool = False
     ) -> Optional[ModelType]:
         """Get a record by a specific field value."""
@@ -302,7 +293,6 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             raise ValueError(f"Model {self.model.__name__} does not have field {field}")
         
         query = select(self.model).where(getattr(self.model, field) == value)
-        query = self._apply_tenant_filter(query, tenant_id)
         query = self._apply_soft_delete_filter(query, include_deleted)
         
         result = await db.execute(query)
@@ -313,7 +303,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         fields: Dict[str, Any],
-        tenant_id: Optional[str] = None,
+         
         include_deleted: bool = False
     ) -> List[ModelType]:
         """Get records matching multiple field values."""
@@ -324,7 +314,6 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 raise ValueError(f"Model {self.model.__name__} does not have field {field}")
             query = query.where(getattr(self.model, field) == value)
         
-        query = self._apply_tenant_filter(query, tenant_id)
         query = self._apply_soft_delete_filter(query, include_deleted)
         
         result = await db.execute(query)

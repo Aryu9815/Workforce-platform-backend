@@ -1,25 +1,41 @@
 """
 Staff management API routes.
 """
+from select import select
+from argon2 import hash_password
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 from app.middleware.auth import AuthMiddleware
 from app.api.schemas import (
-    DesignationCreate,
-    DesignationResponse,
-    DesignationUpdate,
-    StaffCreate,
-    StaffUpdate,
-    StaffResponse,
-    DepartmentCreate,
-    DepartmentUpdate,
-    DepartmentResponse,
+
     PaginatedResponse,
     PaginationParams,
     SuccessResponse
 )
+
+from app.models.common.user_master import User
+from app.models.tenant.tenant_user import TenantUser
+from app.schemas.staff import (    
+
+    StaffCreate,
+    StaffUpdate,
+    StaffResponse,
+)
+
+from app.schemas.department import (    
+   
+    DepartmentCreate,
+    DepartmentUpdate,
+    DepartmentResponse
+    )
+
+from app.schemas.designation import (    
+    DesignationCreate,
+    DesignationResponse,
+    DesignationUpdate,
+   )
 from app.models.tenant import StaffProfile, Department, Designation
 from app.db.base import get_db_session
 from app.services.crud import CRUDService
@@ -113,69 +129,119 @@ def require_auth_context(request: Request):
 
 @router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)
 async def create_staff(
-    request: Request ,
-    staff_data: StaffCreate ,
+    request: Request,
+    staff_data: StaffCreate,
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Create a new staff member."""
-    logger.info(f"Creating staff with data: {staff_data}")
-    print(f"Creating staff with data: {staff_data}")
-    # tenant_id = getattr(request.state, 'tenant_id', None)
-    tenant_id ="11111111-1111-1111-1111-111111111111"
-    print(f"Tenant ID from request state: {tenant_id}")
+    
+    tenant_id = getattr(request.state, "tenant_id", None)
     if not tenant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Tenant context missing"
+        raise HTTPException(status_code=400, detail="Tenant context missing")
+
+    async with db.begin():  # ✅ atomic transaction
+
+        # -------------------------------------------------
+        # 1️⃣ Check if staff already exists in this tenant
+        # -------------------------------------------------
+        existing_staff = await staff_crud.get_by_field(
+            db,
+            field="email",
+            value=staff_data.email,
+            tenant_id=tenant_id,
         )
 
-    user_id = getattr(request.state, 'user_id', None)
-    
-    # Check if email already exists in tenant
-    existing = await staff_crud.get_by_field(
-        db,
-        field="email",
-        value=staff_data.email,
-        tenant_id=tenant_id
-    )
-    
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Staff member with this email already exists"
-        )
-    
-    # Create staff
-    staff = await staff_crud.create(
-        db,
-        obj_in=staff_data.model_dump(),
-        tenant_id=tenant_id
-    )
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.STAFF_CREATED,
-        aggregate_type="staff",
-        aggregate_id=str(staff.id),
-        tenant_id=tenant_id,
-        payload={
-            "employee_code": staff.employee_code,
-            "email": staff.email,
-            "name": f"{staff.first_name} {staff.last_name}",
-            "department_id": str(staff.department_id)if staff.department_id else None,
-            "created_by": user_id
-        }
-    )
-    department_crud = CRUDService(Department)
-    designation_crud = CRUDService(Designation)
-    department =  await department_crud.get(db, staff.department_id, tenant_id=tenant_id) if staff.department_id else None
-    designation = await designation_crud.get(db, staff.designation_id, tenant_id=tenant_id) if staff.designation_id else None
-    staff.department_name =  department.name if department else None
-    staff.designation_name = designation.name if designation else None
-    print(f"Staff created with ID: {staff.id}, Department: {staff.department_name}, Designation: {staff.designation_name}")
+        if existing_staff:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Staff already exists in this tenant"
+            )
 
-    logger.info(f"Staff created: {staff.id}")
-    
+        # -------------------------------------------------
+        # 2️⃣ Check if master user exists globally
+        # -------------------------------------------------
+        
+        result = await db.execute(
+            select(User).where(
+                User.email == staff_data.email,
+                User.is_deleted == False
+            )
+        )
+        user = result.scalar_one_or_none()
+
+        if user:
+            # -------------------------------------------------
+            # Check if already mapped to this tenant
+            # -------------------------------------------------
+            result = await db.execute(
+                select(TenantUser).where(
+                    TenantUser.user_id == user.id,
+                    TenantUser.tenant_id == tenant_id
+                )
+            )
+            tenant_mapping = result.scalar_one_or_none()
+
+            if tenant_mapping:
+                raise HTTPException(
+                    status_code=409,
+                    detail="User already belongs to this tenant"
+                )
+
+            # -------------------------------------------------
+            # Add tenant mapping
+            # -------------------------------------------------
+            db.add(
+                TenantUser(
+                    tenant_id=tenant_id,
+                    user_id=user.id,
+                    invited_by=getattr(request.state, "user_id", None),
+                )
+            )
+
+            # Update JSONB safely
+            if tenant_id not in (user.tenant_ids or []):
+                user.tenant_ids = (user.tenant_ids or []) + [str(tenant_id)]
+
+        else:
+            # -------------------------------------------------
+            # Create new master user
+            # -------------------------------------------------
+            user = User(
+                email=staff_data.email,
+                password_hash=hash_password("Temp@123"),  # generate properly
+                first_name=staff_data.first_name,
+                last_name=staff_data.last_name,
+                phone=staff_data.phone,
+                tenant_ids=[str(tenant_id)]
+            )
+            db.add(user)
+            await db.flush()  # to get user.id
+
+            db.add(
+                TenantUser(
+                    tenant_id=tenant_id,
+                    user_id=user.id,
+                    invited_by=getattr(request.state, "user_id", None),
+                )
+            )
+
+        # -------------------------------------------------
+        # 3️⃣ Create Staff Profile
+        # -------------------------------------------------
+        staff = StaffProfile(
+            **staff_data.model_dump(),
+            tenant_id=tenant_id,
+            user_id=user.id,
+        )
+
+        db.add(staff)
+        await db.flush()
+
+    # -------------------------------------------------
+    # 4️⃣ Fetch related names
+    # -------------------------------------------------
+    department = await db.get(Department, staff.department_id)
+    designation = await db.get(Designation, staff.designation_id)
+
     return StaffResponse(
         id=staff.id,
         employee_code=staff.employee_code,
@@ -185,22 +251,19 @@ async def create_staff(
         phone=staff.phone,
         department_id=staff.department_id,
         designation_id=staff.designation_id,
-        department_name=staff.department_name,
-        designation_name=staff.designation_name,
+        department_name=department.name if department else None,
+        designation_name=designation.name if designation else None,
         reporting_manager_id=staff.reporting_manager_id,
         employment_type=staff.employment_type,
         join_date=staff.join_date,
         work_location=staff.work_location,
-        user_id=staff.user_id,
-        exit_date=staff.exit_date,
-        exit_reason=staff.exit_reason,
+        user_id=user.id,
         skills=staff.skills or [],
-        is_active=staff.is_active,
+        is_active=True,
         full_name=f"{staff.first_name} {staff.last_name}",
         created_at=staff.created_at,
-        updated_at=staff.updated_at
+        updated_at=staff.updated_at,
     )
-
 
 
 # ============================================

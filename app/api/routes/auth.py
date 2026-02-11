@@ -47,8 +47,8 @@ async def login(
         )
     
     tenants = await auth_service.get_user_tenants(db, user.id)
-    if len(tenants)>1:
-        multiple_tenants_found = True
+    # if len(tenants)>1:
+    multiple_tenants_found = True
     tenant = tenants[0]
     # Get user agent
     user_agent = request.headers.get("User-Agent")
