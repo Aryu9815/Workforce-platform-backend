@@ -15,7 +15,7 @@ class RefreshToken(CommonBase):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenant_master.tenant_id", ondelete="CASCADE"), nullable=True)
     token = Column(String(255), unique=True, nullable=False)
     refresh_token = Column(String(255), unique=True, nullable=False)
     token_expires_at = Column(DateTime(timezone=True), nullable=False)

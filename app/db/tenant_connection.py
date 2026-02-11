@@ -7,7 +7,11 @@ from app.models.common.tenant_configuration import TenantConfiguration
 from app.core.logging_config import get_logger
 import asyncio
 from app.core.config import settings
+from sqlalchemy import event
+import logging
+import time
 
+sql_logger = logging.getLogger("sql_logger")
 logger = get_logger(__name__)
 
 _tenant_engine_cache: Dict[str, Tuple[AsyncEngine, async_sessionmaker]] = {}
@@ -64,6 +68,34 @@ async def get_tenant_session(db: AsyncSession, tenant_uuid: str) -> Callable[...
         db_url,
         pool_recycle=180,
     )
+
+    # Add event listener for SQL logging
+    @event.listens_for(async_engine.sync_engine, "before_cursor_execute")
+    def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        context._query_start_time = time.time()
+    
+    @event.listens_for(async_engine.sync_engine, "after_cursor_execute")
+    def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        try:
+            duration = (time.time() - context._query_start_time) * 1000  # ms
+            
+            # TRUNCATE very long statements (to avoid huge logs)
+            truncated_statement = (
+                statement if len(statement) < 500 else statement[:500] + " ...[truncated]"
+            )
+
+            sql_logger.info(
+                f"[{duration:.2f} ms] SQL: {truncated_statement} | Params: {parameters}"
+            )
+
+            # Optional: Slow query warning
+            if duration > 500:  # e.g., >0.5 seconds
+                sql_logger.warning(
+                    f"SLOW QUERY ({duration:.2f} ms): {truncated_statement}"
+                )
+
+        except Exception as e:
+            sql_logger.error(f"SQL logging failed: {str(e)}")
 
     async_session_maker = async_sessionmaker(bind=async_engine, expire_on_commit=False)
     

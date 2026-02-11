@@ -45,16 +45,11 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
-    if not login_data.tenant_id:
-        tenants = await auth_service.get_user_tenants(db, user.id)
-        if len(tenants)>1:
-            return TokenResponse(
-                tenants=tenants,
-                tenant_not_found=True
-            )
-        else:
-            login_data.tenant_id = list(tenants.keys())[0]
     
+    tenants = await auth_service.get_user_tenants(db, user.id)
+    if len(tenants)>1:
+        multiple_tenants_found = True
+    tenant = tenants[0]
     # Get user agent
     user_agent = request.headers.get("User-Agent")
     
@@ -62,7 +57,7 @@ async def login(
     access_token, refresh_token = await auth_service.create_tokens(
         db,
         user,
-        tenant_id=login_data.tenant_id,
+        tenant_id=tenant['id'],
         user_agent=user_agent
     )
     
@@ -73,7 +68,8 @@ async def login(
         refresh_token=refresh_token,
         token_type="bearer",
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        tenant_id=login_data.tenant_id
+        tenant=tenant,
+        multiple_tenants_found=multiple_tenants_found
     )
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -252,17 +248,7 @@ async def get_user_tenants(
     
     tenants = await auth_service.get_user_tenants(db, user_id)
     
-    return [
-        TenantListResponse(
-            id=tenant[0],
-            name=tenant[1],
-            slug=tenant[2],
-            status="active",
-            is_primary=True
-        )
-        for tenant in tenants
-    ]
-
+    return tenants
 
 @router.post("/switch-tenant", response_model=TokenResponse)
 async def switch_tenant(
@@ -290,13 +276,14 @@ async def switch_tenant(
     
     # Verify user has access to tenant
     user_tenants = await auth_service.get_user_tenants(db, user_id)
-    tenant_ids = [t[0] for t in user_tenants]
+    tenant_ids = [t['id'] for t in user_tenants]
     
     if tenant_id not in tenant_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied to this tenant"
         )
+    tenant = [t for t in user_tenants if t['id'] == tenant_id][0]
     
     # Revoke old tokens
     await auth_service.revoke_all_user_tokens(db, user_id)
@@ -317,5 +304,6 @@ async def switch_tenant(
         refresh_token=refresh_token,
         token_type="bearer",
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        tenant_id=tenant_id
+        tenant=tenant,
+        multiple_tenants_found=True
     )

@@ -69,20 +69,18 @@ class PaginatedResponse(BaseSchema):
 
 class TokenResponse(BaseSchema):
     """Token response schema."""
-    access_token: Optional[str]
-    refresh_token: Optional[str]
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
-    expires_in: Optional[int]
-    tenant_id: Optional[str] = None
-    tenants: Optional[Dict[str, Any]] = None
-    tenant_not_found: bool = False
+    expires_in: Optional[int] = None
+    tenant: Optional[Dict[str, Any]] = None
+    multiple_tenants_found: bool = False
 
 
 class LoginRequest(BaseSchema):
     """Login request schema."""
     email: EmailStr
     password: str
-    tenant_id: Optional[str] = None
 
 
 class RegisterRequest(BaseSchema):
@@ -178,9 +176,6 @@ class TenantListResponse(BaseSchema):
     """Tenant list item response."""
     id: UUID
     name: str
-    slug: str
-    status: str
-    is_primary: bool
 
 
 # ============================================

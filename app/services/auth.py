@@ -339,11 +339,14 @@ class AuthService:
         user = await self.user_crud.get(db, user_id)
         if not user:
             None
-        tenants = {}
+        tenants = []
         for tenant_id in user.tenant_ids:
             result = await db.execute(select(TenantMaster).where(TenantMaster.tenant_id == tenant_id, TenantMaster.is_deleted == False))
             tenant = result.scalar_one_or_none()
-            tenants[tenant_id] = tenant.tenant_name
+            tenants.append({
+                "id":tenant.tenant_id, 
+                "name":tenant.tenant_name,
+            })
         return tenants
 
         
