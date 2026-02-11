@@ -274,7 +274,32 @@ class AuthService:
         permissions = [row[0] for row in result.all()]
         
         return permissions
-    
+    async def get_user_tenants_by_email(
+        self,
+        db: AsyncSession,
+        email: str):
+
+        """Get all tenants for a user by email."""
+        query = select(TenantUser, Tenant).join(
+            Tenant,
+            TenantUser.tenant_id == Tenant.id
+        ).join(
+            User,
+            TenantUser.user_id == User.id
+        ).where(
+            and_(
+                User.email == email,
+                Tenant.deleted_at.is_(None)
+            )
+        )
+        result = await db.execute(query)
+        tenants = []
+        for tu, tenant in result.all():
+            tenants.append((str(tenant.id), tenant.name, tenant.slug))
+        return tenants
+
+
+
     async def get_user_tenants(
         self,
         db: AsyncSession,

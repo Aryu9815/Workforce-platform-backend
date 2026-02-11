@@ -208,7 +208,7 @@ class StaffCreate(StaffBase):
     custom_fields: Optional[Dict[str, Any]] = None
 
 
-class StaffUpdate(BaseSchema):
+class StaffUpdate( BaseSchema):
     """Staff update schema."""
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -220,6 +220,7 @@ class StaffUpdate(BaseSchema):
     work_location: Optional[str] = None
     skills: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    join_date: Optional[date] = None
 
 
 class StaffResponse(StaffBase, TimestampSchema):
