@@ -276,14 +276,13 @@ async def switch_tenant(
     
     # Verify user has access to tenant
     user_tenants = await auth_service.get_user_tenants(db, user_id)
-    tenant_ids = [t['id'] for t in user_tenants]
-    
+    tenant_ids = [str(t['id']) for t in user_tenants]
     if tenant_id not in tenant_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied to this tenant"
         )
-    tenant = [t for t in user_tenants if t['id'] == tenant_id][0]
+    tenant = [t for t in user_tenants if str(t['id']) == tenant_id][0]
     
     # Revoke old tokens
     await auth_service.revoke_all_user_tokens(db, user_id)
