@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     PASSWORD_MIN_LENGTH: int = 8
     BCRYPT_ROUNDS: int = 12
     
+    CACHE_DB : str = "YES"
     # CORS
     CORS_ORIGINS: str | List[str] = ["http://localhost:3000", "http://localhost:5173"]
     

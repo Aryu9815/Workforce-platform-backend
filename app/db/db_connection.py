@@ -11,7 +11,7 @@ from app.core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-DATABASE_URL = settings.DATABASE_URL
+DATABASE_URL = str(settings.DATABASE_URL)
 
 # Cache for common database engine and session maker
 # Store as tuple: (engine, session_maker)

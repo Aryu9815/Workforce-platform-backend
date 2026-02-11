@@ -17,7 +17,7 @@ from app.api.schemas import (
     SuccessResponse
 )
 from app.services.auth import auth_service
-from app.db.base import get_db_session, get_common_db
+from app.db.base import get_db_session , get_common_db
 from app.core.config import settings
 from app.core.logging_config import get_logger
 
@@ -202,7 +202,7 @@ async def change_password(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
     request: Request,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Get current authenticated user details."""
     user_id = getattr(request.state, 'user_id', None)
@@ -268,7 +268,7 @@ async def get_user_tenants(
 async def switch_tenant(
     request: Request,
     tenant_id: str,
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_common_db)
 ):
     """Switch to a different tenant and get new tokens."""
     user_id = getattr(request.state, 'user_id', None)
