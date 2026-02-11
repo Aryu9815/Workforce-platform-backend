@@ -16,7 +16,7 @@ class TenantConfiguration(CommonBase):
     __tablename__ = "tenant_configuration"
 
     config_id = Column(Integer, primary_key=True, autoincrement=True)
-    tenant_uuid = Column(UUID(as_uuid=True), ForeignKey("tenant_master.tenant_uuid"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenant_master.tenant_id"), nullable=False)
     biz_config = Column(JSON, default={})
     env_config = Column(JSON, default={})
     app_config = Column(JSON, default={})
