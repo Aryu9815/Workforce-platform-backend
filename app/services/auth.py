@@ -341,7 +341,7 @@ class AuthService:
             None
         tenants = {}
         for tenant_id in user.tenant_ids:
-            result = await db.execute(select(TenantMaster).where(TenantMaster.id == tenant_id, TenantMaster.is_deleted == False))
+            result = await db.execute(select(TenantMaster).where(TenantMaster.tenant_id == tenant_id, TenantMaster.is_deleted == False))
             tenant = result.scalar_one_or_none()
             tenants[tenant_id] = tenant.tenant_name
         return tenants
