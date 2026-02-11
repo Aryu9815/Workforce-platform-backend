@@ -133,7 +133,6 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         obj_in: Union[CreateSchemaType, Dict[str, Any]],
-        tenant_id: Optional[str] = None,
         additional_data: Optional[Dict[str, Any]] = None
     ) -> ModelType:
         """Create a new record."""
@@ -142,9 +141,6 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         else:
             obj_data = obj_in.model_dump(exclude_unset=True)
         
-        # Add tenant_id if model supports it
-        if hasattr(self.model, 'tenant_id') and tenant_id:
-            obj_data['tenant_id'] = tenant_id
         
         # Add additional data
         if additional_data:

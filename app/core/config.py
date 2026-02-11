@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     
     # Database
-    DATABASE_URL: PostgresDsn
+    DATABASE_URL: str
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
     DATABASE_POOL_RECYCLE: int = 3600
@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: str | List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    
+    CACHE_DB: str = 'NO'
     
     @field_validator("CORS_ORIGINS", mode="before")
     def fix_cors(cls, v):

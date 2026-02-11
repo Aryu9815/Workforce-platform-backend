@@ -50,7 +50,7 @@ async def get_common_engine_and_session() -> Tuple[AsyncEngine, async_sessionmak
         print("Caching is Disabled")
     # If not in cache, create engine (outside lock to avoid blocking)
     async_engine = create_async_engine(
-        DATABASE_URL,
+        str(DATABASE_URL),
         pool_recycle=180,
     )
     
@@ -105,6 +105,7 @@ async def close_common_engine():
         
         _common_engine_cache = None
         logger.info("Common engine closed and cache cleared")
+
 # Metadata for each schema
 CommonMetadata = MetaData()
 TenantMetadata = MetaData()
