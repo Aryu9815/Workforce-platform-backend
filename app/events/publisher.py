@@ -73,7 +73,6 @@ class DomainEventData:
     event_type: EventType
     aggregate_type: str
     aggregate_id: str
-    tenant_id: str
     payload: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
     correlation_id: Optional[str] = None
@@ -117,7 +116,6 @@ class EventPublisher:
         event_type: EventType,
         aggregate_type: str,
         aggregate_id: str,
-        tenant_id: str,
         payload: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
@@ -128,7 +126,6 @@ class EventPublisher:
             event_type=event_type,
             aggregate_type=aggregate_type,
             aggregate_id=aggregate_id,
-            tenant_id=tenant_id,
             payload=payload,
             metadata=metadata or {},
             correlation_id=correlation_id,
@@ -144,7 +141,6 @@ class EventPublisher:
         logger.info(
             f"Event published: {event_type.value} | "
             f"Aggregate: {aggregate_type}:{aggregate_id} | "
-            f"Tenant: {tenant_id}"
         )
         
         # Notify subscribers
@@ -170,7 +166,6 @@ class EventPublisher:
                 event_type=event.event_type,
                 aggregate_type=event.aggregate_type,
                 aggregate_id=event.aggregate_id,
-                tenant_id=event.tenant_id,
                 payload=event.payload,
                 metadata=event.metadata,
                 correlation_id=event.correlation_id,
@@ -208,7 +203,6 @@ async def publish_event(
     event_type: EventType,
     aggregate_type: str,
     aggregate_id: str,
-    tenant_id: str,
     payload: Dict[str, Any],
     metadata: Optional[Dict[str, Any]] = None,
     correlation_id: Optional[str] = None,
@@ -219,7 +213,6 @@ async def publish_event(
         event_type=event_type,
         aggregate_type=aggregate_type,
         aggregate_id=aggregate_id,
-        tenant_id=tenant_id,
         payload=payload,
         metadata=metadata,
         correlation_id=correlation_id,

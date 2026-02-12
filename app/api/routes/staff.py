@@ -1,8 +1,10 @@
 """
 Staff management API routes.
 """
-from select import select
-from argon2 import hash_password
+
+from sqlalchemy import select
+
+from app.core.security import hash_password
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -51,10 +53,10 @@ staff_crud = CRUDService(StaffProfile)
 department_crud = CRUDService(Department)
 designation_crud = CRUDService(Designation)
 
-def get_department( db: AsyncSession, department_id: UUID, tenant_id: UUID):
-    return department_crud.get(db, department_id, tenant_id=tenant_id)
-def get_designation(db: AsyncSession, designation_id: UUID, tenant_id: UUID):
-    return designation_crud.get(db, designation_id, tenant_id=tenant_id)
+def get_department( db: AsyncSession, department_id: UUID):
+    return department_crud.get(db, department_id)
+def get_designation(db: AsyncSession, designation_id: UUID):
+    return designation_crud.get(db, designation_id)
 @router.get("", response_model=PaginatedResponse)
 async def list_staff(
     request: Request,
@@ -66,28 +68,29 @@ async def list_staff(
 ):
     """List all staff members with filtering."""
     tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
     
     filters = {"is_active": True if status == "active" else False}
     if department_id:
         filters["department_id"] = department_id
     
     # Get total count
-    total = await staff_crud.count(db, tenant_id=tenant_id, filters=filters)
+    total = await staff_crud.count(db, filters=filters)
     
     # Get staff list
     staff_list = await staff_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
-        tenant_id=tenant_id,
+        # tenant_id=tenant_id,
         filters=filters
     )
     
     # Convert to response schema
     staff_responses = []
     for staff in staff_list:
-        department = await get_department(db, staff.department_id, tenant_id) if staff.department_id else None
-        designation = await get_designation(db, staff.designation_id, tenant_id) if staff.designation_id else None
+        department = await get_department(db, staff.department_id) if staff.department_id else None
+        designation = await get_designation(db, staff.designation_id) if staff.designation_id else None
         department_name = department.name if department else None
         designation_name = designation.name if designation else None
         staff_responses.append(StaffResponse(
@@ -111,6 +114,8 @@ async def list_staff(
             full_name=f"{staff.first_name} {staff.last_name}",
             created_at=staff.created_at,
             updated_at=staff.updated_at,
+            created_by=staff.created_by,
+            updated_by=staff.updated_by ,
             department_name= department_name ,  # TODO: Fetch department name
             designation_name=designation_name  # TODO: Fetch designation name
         ))
@@ -127,28 +132,43 @@ def require_auth_context(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return request
 
-@router.post("", response_model=StaffResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=StaffResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_staff(
     request: Request,
     staff_data: StaffCreate,
     db: AsyncSession = Depends(get_db_session),
 ):
-    
+    # -------------------------------------------------
+    # 0️⃣ Validate Tenant Context
+    # -------------------------------------------------
     tenant_id = getattr(request.state, "tenant_id", None)
+    current_user_id = getattr(request.state, "user_id", None)
+    print(f"Tenant ID in request state: {tenant_id}")
+    print(f"Current user ID in request state: {current_user_id}")
+
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant context missing")
-
-    async with db.begin():  # ✅ atomic transaction
-
-        # -------------------------------------------------
-        # 1️⃣ Check if staff already exists in this tenant
-        # -------------------------------------------------
-        existing_staff = await staff_crud.get_by_field(
-            db,
-            field="email",
-            value=staff_data.email,
-            tenant_id=tenant_id,
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant context missing"
         )
+
+    async with db.begin():
+
+        # -------------------------------------------------
+        # 1️⃣ Check if staff email already exists IN THIS TENANT
+        # -------------------------------------------------
+        result = await db.execute(
+            select(StaffProfile).where(
+                StaffProfile.email == staff_data.email,
+                # StaffProfile.tenant_id == tenant_id,
+                StaffProfile.is_deleted == False
+            )
+        )
+        existing_staff = result.scalar_one_or_none()
 
         if existing_staff:
             raise HTTPException(
@@ -159,7 +179,6 @@ async def create_staff(
         # -------------------------------------------------
         # 2️⃣ Check if master user exists globally
         # -------------------------------------------------
-        
         result = await db.execute(
             select(User).where(
                 User.email == staff_data.email,
@@ -169,79 +188,89 @@ async def create_staff(
         user = result.scalar_one_or_none()
 
         if user:
-            # -------------------------------------------------
+            # ---------------------------------------------
             # Check if already mapped to this tenant
-            # -------------------------------------------------
+            # ---------------------------------------------
             result = await db.execute(
                 select(TenantUser).where(
                     TenantUser.user_id == user.id,
-                    TenantUser.tenant_id == tenant_id
+                    TenantUser.tenant_id == tenant_id,
                 )
             )
             tenant_mapping = result.scalar_one_or_none()
 
             if tenant_mapping:
                 raise HTTPException(
-                    status_code=409,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail="User already belongs to this tenant"
                 )
 
-            # -------------------------------------------------
+            # ---------------------------------------------
             # Add tenant mapping
-            # -------------------------------------------------
+            # ---------------------------------------------
             db.add(
                 TenantUser(
                     tenant_id=tenant_id,
                     user_id=user.id,
-                    invited_by=getattr(request.state, "user_id", None),
+                    invited_by=current_user_id,
+                    updated_by=str(current_user_id),
                 )
             )
 
             # Update JSONB safely
-            if tenant_id not in (user.tenant_ids or []):
+            if str(tenant_id) not in (user.tenant_ids or []):
                 user.tenant_ids = (user.tenant_ids or []) + [str(tenant_id)]
 
         else:
-            # -------------------------------------------------
+            # ---------------------------------------------
             # Create new master user
-            # -------------------------------------------------
+            # ---------------------------------------------
             user = User(
                 email=staff_data.email,
-                password_hash=hash_password("Temp@123"),  # generate properly
+                password_hash=hash_password("Temp@123"),  # replace with proper generator
                 first_name=staff_data.first_name,
                 last_name=staff_data.last_name,
                 phone=staff_data.phone,
-                tenant_ids=[str(tenant_id)]
+                tenant_ids=[str(tenant_id)],
+                
             )
+            print("Creating user with this data:", user.email)
+
             db.add(user)
-            await db.flush()  # to get user.id
+            await db.flush()
 
             db.add(
                 TenantUser(
                     tenant_id=tenant_id,
                     user_id=user.id,
-                    invited_by=getattr(request.state, "user_id", None),
+                    invited_by=current_user_id,
+                    created_by=str(current_user_id),
+                    updated_by=str(current_user_id),
                 )
             )
 
         # -------------------------------------------------
-        # 3️⃣ Create Staff Profile
+        # 3️⃣ Create Staff Profile (Tenant Scoped)
         # -------------------------------------------------
+        staff_dict = staff_data.model_dump()
+        staff_dict.pop("created_by", None)
+        staff_dict.pop("updated_by", None)
         staff = StaffProfile(
-            **staff_data.model_dump(),
-            tenant_id=tenant_id,
+            **staff_dict,
             user_id=user.id,
+            created_by=str(current_user_id),
+            updated_by=str(current_user_id),
         )
-
+        print("Creating staff with this data:", staff.created_by)
         db.add(staff)
         await db.flush()
 
     # -------------------------------------------------
-    # 4️⃣ Fetch related names
+    # 4️⃣ Fetch Related Names
     # -------------------------------------------------
     department = await db.get(Department, staff.department_id)
     designation = await db.get(Designation, staff.designation_id)
-
+    print("created by and updated by user id:", current_user_id)
     return StaffResponse(
         id=staff.id,
         employee_code=staff.employee_code,
@@ -259,11 +288,14 @@ async def create_staff(
         work_location=staff.work_location,
         user_id=user.id,
         skills=staff.skills or [],
-        is_active=True,
+        is_active=staff.is_active,
         full_name=f"{staff.first_name} {staff.last_name}",
         created_at=staff.created_at,
         updated_at=staff.updated_at,
+        created_by=str(current_user_id) if current_user_id else None,
+        updated_by=str(current_user_id) if current_user_id else None   ,
     )
+
 
 
 # ============================================
@@ -280,7 +312,6 @@ async def list_departments(
     
     departments = await department_crud.get_multi(
         db,
-        tenant_id=tenant_id,
         filters={"is_active": True}
     )
     
@@ -313,7 +344,6 @@ async def create_department(
     department = await department_crud.create(
         db,
         obj_in=dept_data.model_dump(),
-        tenant_id=tenant_id
     )
     
     logger.info(f"Department created: {department.id}")
@@ -344,7 +374,6 @@ async def list_designations(
 
     designations = await designation_crud.get_multi(
         db,
-        tenant_id=tenant_id,
         filters={"is_active": True} , 
         order_by="name"
     )
@@ -379,7 +408,6 @@ async def create_designation(
     designation = await designation_crud.create(
         db,
         obj_in=designation_data.model_dump(),
-        tenant_id=tenant_id
     )
 
     return DesignationResponse(
@@ -400,12 +428,10 @@ async def update_designation(
     designation_data: DesignationUpdate,
     db: AsyncSession = Depends(get_db_session)
 ):
-    tenant_id = getattr(request.state, 'tenant_id', None)
     if designation_data.department_id:
         designation = await designation_crud.get(
             db,
             designation_id,
-            tenant_id=tenant_id
         )
 
         if not designation:
@@ -442,7 +468,7 @@ async def update_department(
     """Update a department."""
     tenant_id = getattr(request.state, 'tenant_id', None)
     
-    department = await department_crud.get(db, department_id, tenant_id=tenant_id)
+    department = await department_crud.get(db, department_id)
     
     if not department:
         raise HTTPException(
@@ -478,9 +504,8 @@ async def get_staff(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific staff member by ID."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    staff = await staff_crud.get(db, staff_id, tenant_id=tenant_id)
+    staff = await staff_crud.get(db, staff_id)
     
     if not staff:
         raise HTTPException(
@@ -520,10 +545,9 @@ async def update_staff(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Update a staff member."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    staff = await staff_crud.get(db, staff_id, tenant_id=tenant_id)
+    staff = await staff_crud.get(db, staff_id)
     
     if not staff:
         raise HTTPException(
@@ -537,13 +561,12 @@ async def update_staff(
         db_obj=staff,
         obj_in=staff_data.model_dump(exclude_unset=True)
     )
-    
+    print("UPDATE DATA:", staff_data.model_dump())
     # Publish event
     await publish_event(
         event_type=EventType.STAFF_UPDATED,
         aggregate_type="staff",
         aggregate_id=str(updated_staff.id),
-        tenant_id=tenant_id,
         payload={
             "employee_code": updated_staff.employee_code,
             "updated_by": user_id,
@@ -573,7 +596,7 @@ async def update_staff(
         is_active=updated_staff.is_active,
         full_name=f"{updated_staff.first_name} {updated_staff.last_name}",
         created_at=updated_staff.created_at,
-        updated_at=updated_staff.updated_at
+        updated_at=updated_staff.updated_at,
     )
 
 
@@ -584,13 +607,13 @@ async def delete_staff(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Soft delete a staff member."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
+    # tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
     staff = await staff_crud.delete(
         db,
         id=staff_id,
-        tenant_id=tenant_id,
+        # tenant_id=tenant_id,
         soft=True
     )
     
@@ -605,7 +628,7 @@ async def delete_staff(
         event_type=EventType.STAFF_DELETED,
         aggregate_type="staff",
         aggregate_id=str(staff_id),
-        tenant_id=tenant_id,
+        # tenant_id=tenant_id,
         payload={
             "employee_code": staff.employee_code,
             "deleted_by": user_id

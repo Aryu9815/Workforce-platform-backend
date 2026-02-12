@@ -5,7 +5,7 @@ Pydantic schemas for API request/response validation.
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any, Union
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from enum import Enum
 
 class BaseSchema(BaseModel):
@@ -30,6 +30,8 @@ class StaffBase(BaseSchema):
     employment_type: str = "full_time"
     join_date: date
     work_location: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
 
 
 class StaffCreate(StaffBase):
@@ -38,6 +40,12 @@ class StaffCreate(StaffBase):
     certifications: List[Dict[str, Any]] = []
     emergency_contact: Optional[Dict[str, Any]] = None
     custom_fields: Optional[Dict[str, Any]] = None
+    @field_validator("reporting_manager_id", mode="before")
+    @classmethod
+    def empty_string_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
 
 class StaffUpdate(BaseSchema):
