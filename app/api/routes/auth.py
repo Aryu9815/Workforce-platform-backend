@@ -7,14 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
 from app.api.schemas import (
+    UserResponse,
+    TenantListResponse,
+    SuccessResponse
+)
+from app.schemas.auth_schemas import (
     LoginRequest,
     RegisterRequest,
     TokenResponse,
     RefreshTokenRequest,
-    ChangePasswordRequest,
-    UserResponse,
-    TenantListResponse,
-    SuccessResponse
+    ChangePasswordRequest
 )
 from app.services.auth import auth_service
 from app.db.base import get_db_session , get_common_db
@@ -47,7 +49,11 @@ async def login(
         )
     
     tenants = await auth_service.get_user_tenants(db, user.id)
-    # if len(tenants)>1:
+    if not len(tenants) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="We couldn't find any firm linked to your account.Please contact support or your administrator to activate your access."
+        )
     multiple_tenants_found = True
     tenant = tenants[0]
     # Get user agent

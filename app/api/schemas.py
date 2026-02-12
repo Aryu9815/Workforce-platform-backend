@@ -82,7 +82,6 @@ class LoginRequest(BaseSchema):
     email: EmailStr
     password: str
 
-
 class RegisterRequest(BaseSchema):
     """Registration request schema."""
     email: EmailStr

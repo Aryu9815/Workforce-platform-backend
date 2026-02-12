@@ -9,8 +9,6 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 import logging
 
-from app.db.base import get_tenant_context
-
 logger = logging.getLogger(__name__)
 
 ModelType = TypeVar("ModelType")
@@ -36,26 +34,16 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self.create_schema = create_schema
         self.update_schema = update_schema
     
-    # def _get_tenant_filter(self, tenant_id: Optional[str] = None) -> Any:
-    #     """Get tenant filter condition if model has tenant_id."""
-    #     if hasattr(self.model, 'tenant_id'):
-    #         if tenant_id is None:
-    #             tenant_id = get_tenant_context()
-    #         if tenant_id:
-    #             return self.model.tenant_id == tenant_id
-    #     return None
-    
-    # def _apply_tenant_filter(self, query, tenant_id: Optional[str] = None):
-    #     """Apply tenant filter to query."""
-    #     tenant_filter = self._get_tenant_filter(tenant_id)
-    #     if tenant_filter is not None:
-    #         query = query.where(tenant_filter)
-    #     return query
-    
     def _apply_soft_delete_filter(self, query, include_deleted: bool = False):
         """Apply soft delete filter to query."""
-        if hasattr(self.model, 'deleted_at') and not include_deleted:
-            query = query.where(self.model.deleted_at.is_(None))
+        if hasattr(self.model, 'is_deleted') and not include_deleted:
+            query = query.where(self.model.is_deleted.is_(False))
+        return query
+   
+    def _apply_is_active_filter(self, query, include_inactive: bool = False):
+        """Apply soft delete filter to query."""
+        if hasattr(self.model, 'is_active') and not include_inactive:
+            query = query.where(self.model.is_active.is_(True))
         return query
     
     async def get(
@@ -63,11 +51,13 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         id: Union[str, UUID],
          
-        include_deleted: bool = False
+        include_deleted: bool = False,
+        include_inactive: bool = False
     ) -> Optional[ModelType]:
         """Get a single record by ID."""
         query = select(self.model).where(self.model.id == id)
         query = self._apply_soft_delete_filter(query, include_deleted)
+        query = self._apply_is_active_filter(query, include_inactive)
         
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -80,12 +70,14 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         limit: int = 20,
          
         include_deleted: bool = False,
+        include_inactive: bool = False,
         order_by: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None
     ) -> List[ModelType]:
         """Get multiple records with pagination."""
         query = select(self.model)
         query = self._apply_soft_delete_filter(query, include_deleted)
+        query = self._apply_is_active_filter(query, include_inactive)
         
         # Apply additional filters
         if filters:
@@ -110,12 +102,14 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
          
         include_deleted: bool = False,
+        include_inactive: bool = False,
         filters: Optional[Dict[str, Any]] = None
     ) -> int:
         """Count records."""
         query = select(func.count(self.model.id))
         query = self._apply_soft_delete_filter(query, include_deleted)
-        
+        query = self._apply_is_active_filter(query, include_inactive)
+
         # Apply additional filters
         if filters:
             for key, value in filters.items():
@@ -286,7 +280,8 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         field: str,
         value: Any,
          
-        include_deleted: bool = False
+        include_deleted: bool = False,
+        include_inactive: bool = False
     ) -> Optional[ModelType]:
         """Get a record by a specific field value."""
         if not hasattr(self.model, field):
@@ -294,7 +289,8 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         query = select(self.model).where(getattr(self.model, field) == value)
         query = self._apply_soft_delete_filter(query, include_deleted)
-        
+        query = self._apply_is_active_filter(query, include_inactive)
+
         result = await db.execute(query)
         return result.scalar_one_or_none()
     
@@ -304,7 +300,8 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         fields: Dict[str, Any],
          
-        include_deleted: bool = False
+        include_deleted: bool = False,
+        include_inactive: bool = False
     ) -> List[ModelType]:
         """Get records matching multiple field values."""
         query = select(self.model)
@@ -315,6 +312,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             query = query.where(getattr(self.model, field) == value)
         
         query = self._apply_soft_delete_filter(query, include_deleted)
-        
+        query = self._apply_is_active_filter(query, include_inactive)
+
         result = await db.execute(query)
         return result.scalars().all()

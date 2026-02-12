@@ -295,7 +295,7 @@ async def list_departments(
             is_active=dept.is_active,
             created_at=dept.created_at,
             updated_at=dept.updated_at,
-            staff_count=0  # TODO: Calculate staff count
+            staff_count=0 
         )
         for dept in departments
     ]
@@ -615,3 +615,12 @@ async def delete_staff(
     logger.info(f"Staff deleted: {staff_id}")
     
     return SuccessResponse(message="Staff member deleted successfully")
+
+async def get_staff_names(
+    request: Request,
+    staff_ids: List[UUID],
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get staff names by IDs."""
+    
+    

@@ -18,7 +18,7 @@ from app.core.security import (
 )
 from app.core.config import settings
 from app.services.crud import CRUDService
-
+from app.utils.validators import validate_email, validate_password_strength, validate_phone
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +37,7 @@ class AuthService:
     ) -> Optional[User]:
         """Authenticate a user with email and password."""
         # Get user by email
+        email = email.lower().strip()
         user = await self.user_crud.get_by_field(db, field="email", value=email)
         
         if not user:
@@ -81,16 +82,27 @@ class AuthService:
         phone: Optional[str] = None
     ) -> User:
         """Register a new user."""
+        # Validate email
+        if not validate_email(email):
+            raise ValueError("Invalid email format")
+        
+        # Validate phone
+        if phone and not validate_phone(phone):
+            raise ValueError("Invalid phone number format")
+        
+        if not validate_password_strength(password):
+            raise ValueError("Password does not meet the strength requirements")
+        
         # Check if user already exists
         existing_user = await self.user_crud.get_by_field(db, field="email", value=email)
         if existing_user:
             raise ValueError(f"User with email {email} already exists")
-        print('PAASDD', password, len(password))
+
         # Validate password
         if len(password) < settings.PASSWORD_MIN_LENGTH:
             raise ValueError(f"Password must be at least {settings.PASSWORD_MIN_LENGTH} characters")
         hash_pw = hash_password(password)
-        print('hash', hash_pw)
+        
         # Create user
         user_data = {
             "email": email,
