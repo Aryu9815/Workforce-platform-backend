@@ -516,7 +516,9 @@ async def get_staff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff member not found"
         )
-    
+    designation = await designation_crud.get(db, staff.designation_id)
+    department = await department_crud.get(db, staff.department_id)
+    print("designation and department fetched" , designation, department)
     return StaffResponse(
         id=staff.id,
         employee_code=staff.employee_code,
@@ -537,7 +539,9 @@ async def get_staff(
         is_active=staff.is_active,
         full_name=f"{staff.first_name} {staff.last_name}",
         created_at=staff.created_at,
-        updated_at=staff.updated_at
+        updated_at=staff.updated_at,
+        designation_name=designation.name if designation else None,
+        department_name=department.name if department else None
     )
 
 
@@ -580,7 +584,7 @@ async def update_staff(
         }
     )
     
-    
+
     logger.info(f"Staff updated: {updated_staff.id}")
     
     return StaffResponse(
