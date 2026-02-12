@@ -30,6 +30,7 @@ class WorkflowBase(BaseSchema):
 
 class WorkflowCreate(WorkflowBase):
     """Project creation schema."""
+    created_by: Optional[str] = None
     settings: Optional[Dict[str, Any]] = None
 
 class WorkflowUpdate(BaseSchema):
@@ -42,7 +43,7 @@ class WorkflowUpdate(BaseSchema):
     settings: Optional[Dict[str, Any]] = None
 
 
-class WorkflowStates(BaseSchema):
+class WorkflowStateBase(BaseSchema):
     workflow_id: UUID
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
@@ -51,11 +52,11 @@ class WorkflowStates(BaseSchema):
     is_final: bool = False
     color: Optional[str] = None
     category: Optional[str] = None
-    require_assingment: Optional[bool] = False
+    requires_assignment: Optional[bool] = False
     time_limit_hours: Optional[int] = None
 
-class CreateWorkFlowState(WorkflowBase):
-    pass 
+class CreateWorkFlowState(WorkflowStateBase):
+    created_by: Optional[str] = None
 
 class UpdateWorkFlowState(BaseSchema):
     name: Optional[str] = None
@@ -66,30 +67,6 @@ class UpdateWorkFlowState(BaseSchema):
     color: Optional[str] = None
     category: Optional[str] = None
 
-
-class WorkflowStates(BaseSchema):
-    workflow_id: UUID
-    name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-    order_index: int
-    is_initial: bool = False
-    is_final: bool = False
-    color: Optional[str] = None
-    category: Optional[str] = None
-    require_assingment: Optional[bool] = False
-    time_limit_hours: Optional[int] = None
-
-class CreateWorkFlowState(WorkflowBase):
-    pass 
-
-class UpdateWorkFlowState(BaseSchema):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    order_index: Optional[int] = None
-    is_initial: Optional[bool]
-    is_final: Optional[bool]
-    color: Optional[str] = None
-    category: Optional[str] = None
 
 class WorkflowTransitionBase(BaseSchema):
     workflow_id: UUID
@@ -97,13 +74,14 @@ class WorkflowTransitionBase(BaseSchema):
     to_state_id: UUID
     name: Optional[str] = None
     description: Optional[str] = None
-    requires_approval: bool = False
+    request_approval: bool = False
     approval_flow_id: Optional[UUID] = None
     auto_transition: bool = False
     condition_rules: Optional[dict] = None
 
 
 class CreateWorkflowTransition(WorkflowTransitionBase):
+    created_by: Optional[str] = None
     pass
 
 

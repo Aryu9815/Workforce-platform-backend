@@ -54,6 +54,7 @@ class ProjectCreate(ProjectBase):
     location: Optional[Dict[str, Any]] = None
     settings: Optional[Dict[str, Any]] = None
     custom_fields: Optional[Dict[str, Any]] = None
+    created_by: Optional[str] = None
 
 
 class ProjectUpdate(BaseSchema):
@@ -81,7 +82,7 @@ class ProjectMemberBase(BaseSchema):
 
 
 class CreateProjectMember(ProjectMemberBase):
-    pass
+    created_by: Optional[str] = None
 
 class UpdateProjectMember(BaseSchema):
     role: Optional[str] = None
@@ -104,3 +105,21 @@ class ProjectMemberResponse(TimestampSchema):
     is_removed: Optional[bool] = None
     is_active: Optional[bool] = None
     is_deleted: Optional[bool] = None
+    name: Optional[str] = None
+    designation: Optional[str] = None
+
+class ProjectResponse(ProjectBase, TimestampSchema):
+    """Project response schema."""
+    id: UUID
+    parent_project_id: Optional[UUID] = None
+    client_id: Optional[UUID] = None
+    project_manager_id: UUID
+    actual_start_date: Optional[date] = None
+    actual_end_date: Optional[date] = None
+    cost_estimate: Optional[float] = None
+    actual_cost: float
+    progress_percentage: int
+    is_template: bool
+    deleted_at: Optional[datetime] = None
+    manager_name: Optional[str] = None
+    project_members: List[ProjectMemberResponse] = []
