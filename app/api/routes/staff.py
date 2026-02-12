@@ -312,7 +312,7 @@ async def list_departments(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List all departments."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
+    # tenant_id = getattr(request.state, 'tenant_id', None)
     
     departments = await department_crud.get_multi(
         db,
@@ -343,13 +343,16 @@ async def create_department(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Create a new department."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
+    # tenant_id = getattr(request.state, 'tenant_id', None)
+    current_user_id = getattr(request.state, "user_id", None)
+    dept_data_dict = dept_data.model_dump()
+    dept_data_dict["created_by"] = current_user_id
     department = await department_crud.create(
         db,
-        obj_in=dept_data.model_dump(),
+        obj_in=dept_data_dict,
     )
-    
+    await db.commit()
+    await db.refresh(department)
     logger.info(f"Department created: {department.id}")
     
     return DepartmentResponse(
@@ -408,11 +411,18 @@ async def create_designation(
     logger.info(f"Creating designation with data: {designation_data}")  
     print(f"Creating designation with data: {designation_data}")
     tenant_id = getattr(request.state, 'tenant_id', None)
+    current_user_id = getattr(request.state, "user_id", None)
+    
+    designation_data_dict = designation_data.model_dump()
+    designation_data_dict["created_by"] = current_user_id
+    designation_data_dict["updated_by"] = current_user_id
 
     designation = await designation_crud.create(
         db,
-        obj_in=designation_data.model_dump(),
+        obj_in=designation_data_dict,
     )
+    await db.commit()
+    await db.refresh(designation)
 
     return DesignationResponse(
         id=designation.id,
@@ -443,13 +453,16 @@ async def update_designation(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Designation not found"
             )
-
+    current_user_id = getattr(request.state, "user_id", None)
+    designation_data_dict = designation_data.model_dump(exclude_unset=True)
+    designation_data_dict["updated_by"] = current_user_id
     updated = await designation_crud.update(
         db,
         db_obj=designation,
-        obj_in=designation_data.model_dump(exclude_unset=True)
+        obj_in=designation_data_dict
     )
-
+    await db.commit()
+    await db.refresh(updated)
     return DesignationResponse(
         id=updated.id,
         name=updated.name,
@@ -471,6 +484,7 @@ async def update_department(
 ):
     """Update a department."""
     tenant_id = getattr(request.state, 'tenant_id', None)
+    current_user_id = getattr(request.state, "user_id", None)
     
     department = await department_crud.get(db, department_id)
     
@@ -480,14 +494,17 @@ async def update_department(
             detail="Department not found"
         )
     
+    dept_data_dict = dept_data.model_dump(exclude_unset=True)
+    dept_data_dict["updated_by"] = current_user_id
     updated_dept = await department_crud.update(
         db,
         db_obj=department,
-        obj_in=dept_data.model_dump(exclude_unset=True)
+        obj_in=dept_data_dict
     )
     
     logger.info(f"Department updated: {updated_dept.id}")
-    
+    await db.commit()
+    await db.refresh(updated_dept)
     return DepartmentResponse(
         id=updated_dept.id,
         name=updated_dept.name,
