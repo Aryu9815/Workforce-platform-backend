@@ -13,8 +13,8 @@ class TeamService:
         self.project_member_crud = CRUDService(ProjectMember)
 
 
-    async def add_member(self, db: AsyncSession, data: CreateProjectMember, tenant_id: str):
-        member = await self.project_member_crud.create(db, obj_in=data.model_dump(), tenant_id=tenant_id)
+    async def add_member(self, db: AsyncSession, data: CreateProjectMember):
+        member = await self.project_member_crud.create(db, obj_in=data.model_dump())
         await db.commit()    
         return member
 

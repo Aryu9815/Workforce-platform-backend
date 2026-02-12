@@ -32,8 +32,7 @@ class ProjectService:
             existing = await self.project_crud.get_by_field(
                 db,
                 field="code",
-                value=data.code,
-                tenant_id=tenant_id
+                value=data.code
             )
         if existing:
             raise HTTPException(
@@ -42,8 +41,7 @@ class ProjectService:
             )
         project = await self.project_crud.create(
             db,
-            obj_in=data.model_dump(),
-            tenant_id=tenant_id
+            obj_in=data.model_dump()
         )
 
         member_data = CreateProjectMember(
@@ -54,15 +52,13 @@ class ProjectService:
         # Assign user as PROJECT MANAGER
         await self.team_service.add_member(
             db=db,
-            data=member_data,
-            tenant_id=tenant_id
+            data=member_data
         )
 
         # Create default workflow (Todo → In Progress → Review → Done)
         await self.workflow_service.create_default_workflow(
             db=db,
-            project_id=project.id,
-            tenant_id=tenant_id
+            project_id=project.id
         )
 
         return project

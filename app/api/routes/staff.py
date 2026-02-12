@@ -24,6 +24,7 @@ from app.schemas.staff import (
     StaffCreate,
     StaffUpdate,
     StaffResponse,
+    StaffNameResponse
 )
 
 from app.schemas.department import (    
@@ -39,12 +40,12 @@ from app.schemas.designation import (
     DesignationUpdate,
    )
 from app.models.tenant import StaffProfile, Department, Designation
-from app.db.base import get_db_session
+from app.db.base import get_db_session, get_common_db
 from app.services.crud import CRUDService
 from app.services.auth import auth_service
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
-
+from app.services.staff import StaffService
 logger = get_logger(__name__)
 router = APIRouter(prefix="/staff", tags=["Staff Management"])
 
@@ -52,6 +53,7 @@ router = APIRouter(prefix="/staff", tags=["Staff Management"])
 staff_crud = CRUDService(StaffProfile)
 department_crud = CRUDService(Department)
 designation_crud = CRUDService(Designation)
+staff_service = StaffService()
 
 def get_department( db: AsyncSession, department_id: UUID):
     return department_crud.get(db, department_id)
@@ -141,6 +143,7 @@ async def create_staff(
     request: Request,
     staff_data: StaffCreate,
     db: AsyncSession = Depends(get_db_session),
+    common_db: AsyncSession = Depends(get_common_db)
 ):
     # -------------------------------------------------
     # 0️⃣ Validate Tenant Context
@@ -179,7 +182,7 @@ async def create_staff(
         # -------------------------------------------------
         # 2️⃣ Check if master user exists globally
         # -------------------------------------------------
-        result = await db.execute(
+        result = await common_db.execute(
             select(User).where(
                 User.email == staff_data.email,
                 User.is_deleted == False
@@ -236,8 +239,8 @@ async def create_staff(
             )
             print("Creating user with this data:", user.email)
 
-            db.add(user)
-            await db.flush()
+            common_db.add(user)
+            await common_db.flush()
 
             db.add(
                 TenantUser(
@@ -497,7 +500,7 @@ async def update_department(
         staff_count=0
     )
 
-@router.get("/{staff_id}", response_model=StaffResponse)
+@router.get("/{staff_id:uuid}", response_model=StaffResponse)
 async def get_staff(
     request: Request,
     staff_id: UUID,
@@ -537,7 +540,7 @@ async def get_staff(
     )
 
 
-@router.put("/{staff_id}", response_model=StaffResponse)
+@router.put("/{staff_id:uuid}", response_model=StaffResponse)
 async def update_staff(
     request: Request,
     staff_id: UUID,
@@ -600,7 +603,7 @@ async def update_staff(
     )
 
 
-@router.delete("/{staff_id}", response_model=SuccessResponse)
+@router.delete("/{staff_id:uuid}", response_model=SuccessResponse)
 async def delete_staff(
     request: Request,
     staff_id: UUID,
@@ -639,11 +642,11 @@ async def delete_staff(
     
     return SuccessResponse(message="Staff member deleted successfully")
 
+@router.get("/get-names")
 async def get_staff_names(
     request: Request,
-    staff_ids: List[UUID],
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get staff names by IDs."""
-    
-    
+    names = await staff_service.list_staff_names(db)
+    return names

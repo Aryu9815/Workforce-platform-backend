@@ -22,7 +22,7 @@ class StaffService:
             .filter(StaffProfile.is_active == True, StaffProfile.is_deleted == False)
         )
         staffs = result.all()
-
+        print('1476',staffs)
         return [
             {
                 "id": staff[0],

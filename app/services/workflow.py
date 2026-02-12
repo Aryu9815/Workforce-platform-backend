@@ -14,7 +14,7 @@ class WorkflowService:
         self.status_crud = CRUDService(Status)
         self.workflow_state_crud = CRUDService(WorkflowState)
 
-    async def create_default_workflow(self, db: AsyncSession, project_id: str, tenant_id: str):
+    async def create_default_workflow(self, db: AsyncSession, project_id: str):
 
         workflow = WorkflowCreate(
             project_id=project_id,
@@ -24,7 +24,7 @@ class WorkflowService:
             is_system=True,
             entity_type='project'
         )
-        workflow = await self.workflow_crud.create(db, obj_in=workflow.model_dump(), tenant_id=tenant_id)
+        workflow = await self.workflow_crud.create(db, obj_in=workflow.model_dump())
         
         status_map = {}
 
@@ -38,7 +38,7 @@ class WorkflowService:
                 color=color,
                 position=position
             )
-            state = await self.workflow_state_crud.create(db, obj_in=state.model_dump(), tenant_id=tenant_id)
+            state = await self.workflow_state_crud.create(db, obj_in=state.model_dump())
             status_map[name] = state
 
 
@@ -52,7 +52,7 @@ class WorkflowService:
                 description=f"Transition from {from_s} to {to_s}",
                 auto_transition = False
             )
-            await self.workflow_transition_crud.create(db, obj_in=transition.model_dump(), tenant_id=tenant_id)    
+            await self.workflow_transition_crud.create(db, obj_in=transition.model_dump())    
 
         await db.commit()
 

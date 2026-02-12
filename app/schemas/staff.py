@@ -76,3 +76,7 @@ class StaffResponse(StaffBase, TimestampSchema):
 
 
 
+class StaffNameResponse(BaseSchema):
+    """Schema for staff name and ID."""
+    id: UUID | str
+    full_name: str
