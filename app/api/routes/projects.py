@@ -7,12 +7,14 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.api.schemas import (
-    ProjectCreate,
-    ProjectUpdate,
-    ProjectResponse,
     PaginatedResponse,
     PaginationParams,
     SuccessResponse
+)
+from app.schemas.project_schemas import (
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectResponse
 )
 from app.models.tenant import Project
 from app.db.base import get_db_session
@@ -43,7 +45,6 @@ async def list_projects(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List all projects with filtering."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     filters = {}
     if status:
@@ -51,13 +52,12 @@ async def list_projects(
     if priority:
         filters["priority"] = priority
     
-    total = await project_crud.count(db, tenant_id=tenant_id, filters=filters)
+    total = await project_crud.count(db, filters=filters)
     
     projects = await project_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
-        tenant_id=tenant_id,
         filters=filters
     )
     
@@ -84,7 +84,6 @@ async def list_projects(
             actual_cost=project.actual_cost,
             progress_percentage=project.progress_percentage,
             is_template=project.is_template,
-            deleted_at=project.deleted_at,
             created_at=project.created_at,
             updated_at=project.updated_at,
             manager_name=None 
@@ -107,30 +106,10 @@ async def create_project(
     """Create a new project."""
     tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
-    
-    # Check if project code already exists
-    # if project_data.code:
-    #     existing = await project_crud.get_by_field(
-    #         db,
-    #         field="code",
-    #         value=project_data.code,
-    #         tenant_id=tenant_id
-    #     )
-    #     if existing:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_409_CONFLICT,
-    #             detail="Project with this code already exists"
-    #         )
-    
-    # project = await project_crud.create(
-    #     db,
-    #     obj_in=project_data.model_dump(),
-    #     tenant_id=tenant_id
-    # )
+    print('creating project')
     project = await project_service.create_project(
         db,
         data=project_data,
-        tenant_id=tenant_id,
         user_id=user_id
     )
     
@@ -139,7 +118,6 @@ async def create_project(
         event_type=EventType.PROJECT_CREATED,
         aggregate_type="project",
         aggregate_id=str(project.id),
-        tenant_id=tenant_id,
         payload={
             "name": project.name,
             "code": project.code,
@@ -171,7 +149,6 @@ async def create_project(
         actual_cost=project.actual_cost,
         progress_percentage=project.progress_percentage,
         is_template=project.is_template,
-        deleted_at=project.deleted_at,
         created_at=project.created_at,
         updated_at=project.updated_at
     )
@@ -213,41 +190,7 @@ async def get_project(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific project by ID."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
-    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        code=project.code,
-        description=project.description,
-        status=project.status,
-        priority=project.priority,
-        project_type=project.project_type,
-        start_date=project.start_date,
-        end_date=project.end_date,
-        budget=project.budget,
-        currency=project.currency,
-        parent_project_id=project.parent_project_id,
-        client_id=project.client_id,
-        project_manager_id=project.project_manager_id,
-        actual_start_date=project.actual_start_date,
-        actual_end_date=project.actual_end_date,
-        cost_estimate=project.cost_estimate,
-        actual_cost=project.actual_cost,
-        progress_percentage=project.progress_percentage,
-        is_template=project.is_template,
-        deleted_at=project.deleted_at,
-        created_at=project.created_at,
-        updated_at=project.updated_at
-    )
+    return await project_service.get_project(db, project_id)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -389,3 +332,15 @@ async def get_project_stats(
         "budget_utilization": 0,
         "team_size": 0
     }
+
+@router.get("/{project_id}/members")
+async def get_project_members(
+    request: Request,
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get project members."""
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    
+    members = await team_service.get_project_members(db, project_id)
+    return members
