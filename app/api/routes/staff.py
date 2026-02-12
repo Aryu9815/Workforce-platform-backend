@@ -216,6 +216,7 @@ async def create_staff(
                     tenant_id=tenant_id,
                     user_id=user.id,
                     invited_by=current_user_id,
+                    created_by=str(current_user_id),
                     updated_by=str(current_user_id),
                 )
             )
@@ -564,6 +565,8 @@ async def update_staff(
         db_obj=staff,
         obj_in=staff_data.model_dump(exclude_unset=True)
     )
+    await db.commit()
+    await db.refresh(updated_staff)
     print("UPDATE DATA:", staff_data.model_dump())
     # Publish event
     await publish_event(
@@ -576,6 +579,7 @@ async def update_staff(
             "changes": staff_data.model_dump(exclude_unset=True)
         }
     )
+    
     
     logger.info(f"Staff updated: {updated_staff.id}")
     
