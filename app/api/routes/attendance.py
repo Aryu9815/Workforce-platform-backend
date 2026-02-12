@@ -43,7 +43,6 @@ async def list_attendance(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List attendance records with filtering."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     filters = {}
     if staff_id:
@@ -51,13 +50,12 @@ async def list_attendance(
     if status:
         filters["status"] = status
     
-    total = await attendance_crud.count(db, tenant_id=tenant_id, filters=filters)
+    total = await attendance_crud.count(db, filters=filters)
     
     records = await attendance_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
-        tenant_id=tenant_id,
         filters=filters,
         order_by="date"
     )
@@ -98,7 +96,6 @@ async def check_in(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Record staff check-in."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
     today = date.today()
@@ -107,7 +104,6 @@ async def check_in(
     existing = await attendance_crud.get_by_fields(
         db,
         fields={"staff_id": staff_id, "date": today},
-        tenant_id=tenant_id
     )
     
     if existing:
@@ -126,8 +122,7 @@ async def check_in(
             "check_in_location": location,
             "check_in_method": "web",
             "status": "present"
-        },
-        tenant_id=tenant_id
+        }
     )
     
     # Publish event
@@ -135,7 +130,6 @@ async def check_in(
         event_type=EventType.ATTENDANCE_CHECK_IN,
         aggregate_type="attendance",
         aggregate_id=str(record.id),
-        tenant_id=tenant_id,
         payload={
             "staff_id": str(staff_id),
             "check_in_time": record.check_in.isoformat(),
@@ -171,7 +165,6 @@ async def check_out(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Record staff check-out."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     today = date.today()
     
@@ -179,7 +172,6 @@ async def check_out(
     records = await attendance_crud.get_by_fields(
         db,
         fields={"staff_id": staff_id, "date": today},
-        tenant_id=tenant_id
     )
     
     if not records:
@@ -214,7 +206,6 @@ async def check_out(
         event_type=EventType.ATTENDANCE_CHECK_OUT,
         aggregate_type="attendance",
         aggregate_id=str(record.id),
-        tenant_id=tenant_id,
         payload={
             "staff_id": str(staff_id),
             "check_out_time": record.check_out.isoformat(),
@@ -256,7 +247,6 @@ async def list_leave_requests(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List leave requests with filtering."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     filters = {}
     if staff_id:
@@ -264,13 +254,12 @@ async def list_leave_requests(
     if status:
         filters["status"] = status
     
-    total = await leave_crud.count(db, tenant_id=tenant_id, filters=filters)
+    total = await leave_crud.count(db,  filters=filters)
     
     leaves = await leave_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
-        tenant_id=tenant_id,
         filters=filters
     )
     
@@ -310,12 +299,10 @@ async def create_leave_request(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Create a new leave request."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     leave = await leave_crud.create(
         db,
-        obj_in=leave_data.model_dump(),
-        tenant_id=tenant_id
+        obj_in=leave_data.model_dump()
     )
     
     # Publish event
@@ -323,7 +310,6 @@ async def create_leave_request(
         event_type=EventType.LEAVE_REQUESTED,
         aggregate_type="leave",
         aggregate_id=str(leave.id),
-        tenant_id=tenant_id,
         payload={
             "staff_id": str(leave.staff_id),
             "leave_type_id": str(leave.leave_type_id),
@@ -361,10 +347,9 @@ async def approve_leave(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Approve or reject a leave request."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    leave = await leave_crud.get(db, leave_id, tenant_id=tenant_id)
+    leave = await leave_crud.get(db, leave_id)
     
     if not leave:
         raise HTTPException(
@@ -392,7 +377,6 @@ async def approve_leave(
             event_type=EventType.LEAVE_APPROVED,
             aggregate_type="leave",
             aggregate_id=str(leave.id),
-            tenant_id=tenant_id,
             payload={
                 "staff_id": str(leave.staff_id),
                 "approved_by": user_id,
@@ -427,11 +411,9 @@ async def list_leave_types(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List all leave types."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     leave_types = await leave_type_crud.get_multi(
         db,
-        tenant_id=tenant_id,
         filters={"is_active": True}
     )
     
@@ -457,7 +439,6 @@ async def get_attendance_stats(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get attendance statistics."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     # Use current month/year if not specified
     now = datetime.now()
