@@ -91,6 +91,7 @@ class UpdateProjectMember(BaseSchema):
     is_deleted: Optional[bool] = None
     is_active: Optional[bool] = None
     is_removed: Optional[bool] = None
+    updated_by: Optional[str] = None
 
 
 
@@ -100,8 +101,8 @@ class ProjectMemberResponse(TimestampSchema):
     project_id: Optional[UUID] = None
     staff_id: Optional[UUID] = None
     role: Optional[str] = None
-    joined_at: Optional[date] = None    
-    left_at: Optional[date] = None
+    joined_at: Optional[datetime] = None    
+    left_at: Optional[datetime] = None
     is_removed: Optional[bool] = None
     is_active: Optional[bool] = None
     is_deleted: Optional[bool] = None

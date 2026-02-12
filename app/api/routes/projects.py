@@ -14,7 +14,8 @@ from app.api.schemas import (
 from app.schemas.project_schemas import (
     ProjectCreate,
     ProjectUpdate,
-    ProjectResponse
+    ProjectResponse,
+    UpdateProjectMember
 )
 from app.models.tenant import Project
 from app.db.base import get_db_session
@@ -154,19 +155,19 @@ async def create_project(
     )
 
 
-@router.post("", response_model=ProjectMemberResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/member", response_model=ProjectMemberResponse, status_code=status.HTTP_201_CREATED)
 async def add_project_member(
     request: Request,
     project_data: CreateProjectMember,
     db: AsyncSession = Depends(get_db_session)
 ):
     """Create a new project."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
     
     member = await team_service.add_member(
         db,
         data=project_data,
-        tenant_id=tenant_id
+        user_id=user_id
     )
     
     logger.info(f"Member added to Project: {member.id}")
@@ -344,3 +345,26 @@ async def get_project_members(
     
     members = await team_service.get_project_members(db, project_id)
     return members
+
+@router.delete("/member/{member_id}")
+async def remove_project_member(
+    request: Request,
+    member_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Remove a project member."""
+    user_id = getattr(request.state, 'user_id', None)
+    await team_service.remove_member(db, member_id, user_id)
+    return SuccessResponse(message="Member removed successfully")
+
+@router.put("/member/{member_id}", response_model=ProjectMemberResponse)
+async def remove_project_member(
+    request: Request,
+    member_id: UUID,
+    data: UpdateProjectMember,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Remove a project member."""
+    user_id = getattr(request.state, 'user_id', None)
+    return await team_service.update_member(db, member_id, data, user_id) 
+

@@ -2,9 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import uuid4
 from app.models.tenant import ProjectMember, StaffProfile
-from app.schemas.project_schemas import ProjectMemberBase, CreateProjectMember
+from app.schemas.project_schemas import ProjectMemberBase, CreateProjectMember, UpdateProjectMember
 from app.services.crud import CRUDService
-
+from fastapi import HTTPException, status
+from datetime import datetime, timezone
 
 
 class TeamService:
@@ -14,20 +15,39 @@ class TeamService:
 
 
     async def add_member(self, db: AsyncSession, data: CreateProjectMember, user_id: str):
+        """
+        Create a new project, assign creator as manager,
+        and auto-create a default workflow.
+        """
+        existed_member = await self.project_member_crud.get_by_fields(
+            db,
+            fields={
+                "project_id": data.project_id,
+                "staff_id": data.staff_id
+            }
+        )
+        if existed_member:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Member already exists")
         data.created_by = user_id
         member = await self.project_member_crud.create(db, obj_in=data.model_dump())
         await db.commit()    
         return member
 
 
-    async def remove_member(self, db: AsyncSession, member_id: str):
+    async def remove_member(self, db: AsyncSession, member_id: str, user_id: str):
         
-        member = await self.project_member_crud.get(db,member_id)
+        member = await self.project_member_crud.update_by_id(
+            db, 
+            id=member_id, 
+            obj_in={
+                "is_removed": True, 
+                "left_at": datetime.now(timezone.utc),
+                "updated_by": user_id
+            })
+        await db.commit()
+        await db.refresh(member)
         if not member:
             raise Exception(status=404, detail="Member not found")
-        member.is_removed = True
-        db.add(member)
-        await db.commit()
 
     async def get_project_members(self, db: AsyncSession, project_id: str):
         result = await db.execute(
@@ -63,3 +83,11 @@ class TeamService:
         ]
         return members
     
+    async def update_member(self, db: AsyncSession, member_id: str, data: UpdateProjectMember, user_id: str):
+        data.updated_by = user_id
+        member = await self.project_member_crud.update_by_id(db, id=member_id, obj_in=data.model_dump(exclude_unset=True))
+        await db.commit()
+        await db.refresh(member)
+        if not member:
+            raise Exception(status=404, detail="Member not found")
+        return member
