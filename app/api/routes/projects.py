@@ -202,10 +202,9 @@ async def update_project(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Update a project."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
+    project = await project_crud.get(db, project_id)
     
     if not project:
         raise HTTPException(
@@ -227,7 +226,6 @@ async def update_project(
         event_type=EventType.PROJECT_UPDATED,
         aggregate_type="project",
         aggregate_id=str(updated_project.id),
-        tenant_id=tenant_id,
         payload={
             "name": updated_project.name,
             "status": updated_project.status,
@@ -272,28 +270,13 @@ async def delete_project(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Soft delete a project."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
-    
-    project = await project_crud.delete(
-        db,
-        id=project_id,
-        tenant_id=tenant_id,
-        soft=True
-    )
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
+    project = await project_service.delete_project(db, project_id, user_id)
     # Publish event
     await publish_event(
         event_type=EventType.PROJECT_DELETED,
         aggregate_type="project",
         aggregate_id=str(project_id),
-        tenant_id=tenant_id,
         payload={
             "name": project.name,
             "deleted_by": user_id
@@ -305,34 +288,34 @@ async def delete_project(
     return SuccessResponse(message="Project deleted successfully")
 
 
-@router.get("/{project_id}/stats")
-async def get_project_stats(
-    request: Request,
-    project_id: UUID,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """Get project statistics."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
+# @router.get("/{project_id}/stats")
+# async def get_project_stats(
+#     request: Request,
+#     project_id: UUID,
+#     db: AsyncSession = Depends(get_db_session)
+# ):
+#     """Get project statistics."""
+#     tenant_id = getattr(request.state, 'tenant_id', None)
     
-    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
+#     project = await project_crud.get(db, project_id, tenant_id=tenant_id)
     
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+#     if not project:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Project not found"
+#         )
     
-    # TODO: Calculate actual statistics
-    return {
-        "project_id": str(project_id),
-        "total_tasks": 0,
-        "completed_tasks": 0,
-        "in_progress_tasks": 0,
-        "overdue_tasks": 0,
-        "total_hours": 0,
-        "budget_utilization": 0,
-        "team_size": 0
-    }
+#     # TODO: Calculate actual statistics
+#     return {
+#         "project_id": str(project_id),
+#         "total_tasks": 0,
+#         "completed_tasks": 0,
+#         "in_progress_tasks": 0,
+#         "overdue_tasks": 0,
+#         "total_hours": 0,
+#         "budget_utilization": 0,
+#         "team_size": 0
+#     }
 
 @router.get("/{project_id}/members")
 async def get_project_members(

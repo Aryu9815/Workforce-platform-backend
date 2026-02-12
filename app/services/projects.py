@@ -79,15 +79,12 @@ class ProjectService:
         """
         Update project details (allowed only for project managers).
         """
-        project = await self.get_project(db, project_id)
-
-        # Check permission
-        if not await self.team_service.is_manager(db, project_id, user_id):
-            raise Exception(status=403, detail="Only project managers can update the project")
-
-        for key, value in data.items():
-            setattr(project, key, value)
-
+        project = await self.project_crud.update_by_id(
+            db,
+            id=project_id,
+            obj_in=data,
+            updated_by=user_id
+        )
         await db.commit()
         await db.refresh(project)
         return project
@@ -102,15 +99,21 @@ class ProjectService:
         """
         Soft-delete a project (manager only).
         """
-        project = await self.get_project(db, project_id)
-
-        if not await self.team_service.is_manager(db, project_id, user_id):
-            raise Exception(status=403, detail="Only project managers can delete this project")
-
-        project.is_archived = True
-
-        await db.commit()
-        return {"success": True}
+        project = await self.project_crud.delete(
+            db,
+            id=project_id,
+            user_id=user_id,
+            soft=True
+        )
+        
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found"
+            )
+        
+        return project
+    
 
 
     async def list_projects(
@@ -159,7 +162,6 @@ class ProjectService:
         )
 
         result = result.all()
-        print("members asd",result)
         project_members = [
             {
                 "id": member[0],

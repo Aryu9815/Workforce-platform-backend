@@ -42,8 +42,9 @@ class TeamService:
             obj_in={
                 "is_removed": True, 
                 "left_at": datetime.now(timezone.utc),
-                "updated_by": user_id
-            })
+            },
+            updated_by=user_id
+        )
         await db.commit()
         await db.refresh(member)
         if not member:
@@ -84,8 +85,7 @@ class TeamService:
         return members
     
     async def update_member(self, db: AsyncSession, member_id: str, data: UpdateProjectMember, user_id: str):
-        data.updated_by = user_id
-        member = await self.project_member_crud.update_by_id(db, id=member_id, obj_in=data.model_dump(exclude_unset=True))
+        member = await self.project_member_crud.update_by_id(db, id=member_id, obj_in=data.model_dump(exclude_unset=True), updated_by=user_id)
         await db.commit()
         await db.refresh(member)
         if not member:

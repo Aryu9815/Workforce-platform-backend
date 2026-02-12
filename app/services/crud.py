@@ -8,6 +8,7 @@ from sqlalchemy import select, update, delete, and_, func
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 import logging
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -179,14 +180,17 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, Dict[str, Any]],
-        exclude_unset: bool = True
+        exclude_unset: bool = True,
+        updated_by: Optional[str] = None
     ) -> ModelType:
         """Update a record."""
         if isinstance(obj_in, dict):
             update_data = obj_in
         else:
             update_data = obj_in.model_dump(exclude_unset=exclude_unset)
-        
+        update_data["updated_at"] = datetime.now(timezone.utc)
+        if updated_by:
+            update_data["updated_by"] = updated_by
         # Update object attributes
         for field, value in update_data.items():
             if hasattr(db_obj, field):
@@ -205,18 +209,20 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         id: Union[str, UUID],
         obj_in: Union[UpdateSchemaType, Dict[str, Any]],
+        updated_by: Optional[str] = None,
     ) -> Optional[ModelType]:
         """Update a record by ID."""
         db_obj = await self.get(db, id)
         if not db_obj:
             return None
-        return await self.update(db, db_obj=db_obj, obj_in=obj_in)
+        return await self.update(db, db_obj=db_obj, obj_in=obj_in, updated_by=updated_by)
     
     async def delete(
         self,
         db: AsyncSession,
         *,
         id: Union[str, UUID],
+        user_id: str,
          
         soft: bool = True
     ) -> Optional[ModelType]:
@@ -228,8 +234,10 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         if soft and hasattr(self.model, 'deleted_at'):
             # Soft delete
-            from datetime import datetime
-            db_obj.deleted_at = datetime.utcnow()
+            db_obj.updated_at = datetime.now(timezone.utc)
+            db_obj.updated_by = user_id
+            db_obj.is_deleted = True
+            db_obj.is_active = False
             db.add(db_obj)
             logger.info(f"Soft deleted {self.model.__name__} with id {id}")
         else:
