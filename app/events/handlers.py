@@ -89,7 +89,6 @@ async def handle_audit_log_create(event: DomainEventData):
         "event_type": event.event_type.value,
         "aggregate_type": event.aggregate_type,
         "aggregate_id": event.aggregate_id,
-        "tenant_id": event.tenant_id,
         "payload": event.payload,
         "timestamp": datetime.utcnow().isoformat(),
         "correlation_id": event.correlation_id
@@ -110,9 +109,7 @@ async def handle_project_created_analytics(event: DomainEventData):
     # TODO: Update dashboard widgets
     
     payload = event.payload
-    tenant_id = event.tenant_id
     
-    logger.info(f"Analytics updated for tenant {tenant_id}")
 
 
 async def handle_task_completed_analytics(event: DomainEventData):
