@@ -126,14 +126,17 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         obj_in: Union[CreateSchemaType, Dict[str, Any]],
-        additional_data: Optional[Dict[str, Any]] = None
+        additional_data: Optional[Dict[str, Any]] = None,
+        user_id: Optional[Union[str, UUID]] = None,
     ) -> ModelType:
         """Create a new record."""
         if isinstance(obj_in, dict):
             obj_data = obj_in.copy()
         else:
             obj_data = obj_in.model_dump(exclude_unset=True)
-        
+        if user_id:
+            obj_data['created_by'] = user_id
+        obj_data['created_at'] = datetime.now(timezone.utc)
         
         # Add additional data
         if additional_data:
@@ -152,6 +155,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         objs_in: List[Union[CreateSchemaType, Dict[str, Any]]],
+        user_id: Optional[Union[str, UUID]] = None,
     ) -> List[ModelType]:
         """Create multiple records."""
         db_objs = []
@@ -162,8 +166,9 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             else:
                 obj_data = obj_in.model_dump(exclude_unset=True)
             
-            
-            
+            if user_id:
+                obj_data['created_by'] = user_id
+            obj_data['created_at'] = datetime.now(timezone.utc)
             db_objs.append(self.model(**obj_data))
         
         db.add_all(db_objs)
