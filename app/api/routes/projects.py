@@ -204,22 +204,7 @@ async def update_project(
     """Update a project."""
     user_id = getattr(request.state, 'user_id', None)
     
-    project = await project_crud.get(db, project_id)
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    # Track if status changed to completed
-    was_completed = project.status != "completed" and project_data.status == "completed"
-    
-    updated_project = await project_crud.update(
-        db,
-        db_obj=project,
-        obj_in=project_data.model_dump(exclude_unset=True)
-    )
+    updated_project = await project_service.update_project(db, project_id, user_id, project_data)
     
     # Publish event
     await publish_event(
@@ -257,7 +242,6 @@ async def update_project(
         actual_cost=updated_project.actual_cost,
         progress_percentage=updated_project.progress_percentage,
         is_template=updated_project.is_template,
-        deleted_at=updated_project.deleted_at,
         created_at=updated_project.created_at,
         updated_at=updated_project.updated_at
     )
@@ -286,36 +270,6 @@ async def delete_project(
     logger.info(f"Project deleted: {project_id}")
     
     return SuccessResponse(message="Project deleted successfully")
-
-
-# @router.get("/{project_id}/stats")
-# async def get_project_stats(
-#     request: Request,
-#     project_id: UUID,
-#     db: AsyncSession = Depends(get_db_session)
-# ):
-#     """Get project statistics."""
-#     tenant_id = getattr(request.state, 'tenant_id', None)
-    
-#     project = await project_crud.get(db, project_id, tenant_id=tenant_id)
-    
-#     if not project:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail="Project not found"
-#         )
-    
-#     # TODO: Calculate actual statistics
-#     return {
-#         "project_id": str(project_id),
-#         "total_tasks": 0,
-#         "completed_tasks": 0,
-#         "in_progress_tasks": 0,
-#         "overdue_tasks": 0,
-#         "total_hours": 0,
-#         "budget_utilization": 0,
-#         "team_size": 0
-#     }
 
 @router.get("/{project_id}/members")
 async def get_project_members(

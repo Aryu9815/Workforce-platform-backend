@@ -6,9 +6,10 @@ from typing import List, Optional
 from app.models.tenant import Project, ProjectMember, Workflow, StaffProfile, Designation
 from app.services.workflow import WorkflowService
 from app.services.team import TeamService
-from app.schemas.project_schemas import ProjectCreate, CreateProjectMember
+from app.schemas.project_schemas import ProjectCreate, CreateProjectMember, ProjectUpdate
 from app.services.crud import CRUDService
 from app.schemas.project_schemas import ProjectResponse
+from datetime import datetime, timezone
 
 
 class ProjectService:
@@ -42,6 +43,13 @@ class ProjectService:
                 detail="Project with this code already exists"
             )
         data.created_by = user_id
+        # Create default workflow (Todo → In Progress → Review → Done)
+        workflow = await self.workflow_service.create_default_workflow(
+            db=db,
+            user_id=user_id
+        )
+        data.workflow_id = workflow.id
+        # Create project
         project = await self.project_crud.create(
             db,
             obj_in=data.model_dump()
@@ -58,13 +66,6 @@ class ProjectService:
             data=member_data,
             user_id=user_id
         )
-        print('member added')
-        # Create default workflow (Todo → In Progress → Review → Done)
-        await self.workflow_service.create_default_workflow(
-            db=db,
-            project_id=project.id,
-            user_id=user_id
-        )
 
         return project
 
@@ -74,20 +75,27 @@ class ProjectService:
         db: AsyncSession,
         project_id: str,
         user_id: str,
-        data: dict
+        data: ProjectUpdate
     ):
         """
         Update project details (allowed only for project managers).
         """
-        project = await self.project_crud.update_by_id(
+        project = await self.project_crud.get(db, project_id)
+    
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found"
+            )
+        updated_project = await self.project_crud.update(
             db,
-            id=project_id,
-            obj_in=data,
-            updated_by=user_id
+            db_obj=project,
+            obj_in=data.model_dump(exclude_unset=True)
         )
+
         await db.commit()
         await db.refresh(project)
-        return project
+        return updated_project
 
 
     async def delete_project(
@@ -111,7 +119,9 @@ class ProjectService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Project not found"
             )
-        
+        await self.team_service.delete_project_members(db, project_id, user_id) # delete project members
+        await self.workflow_service.delete_workflow(db, project.workflow_id, user_id) # delete workflow
+        await db.commit()
         return project
     
 

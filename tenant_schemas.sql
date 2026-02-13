@@ -28,8 +28,8 @@ CREATE TABLE tenant_users (
     -- From TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -52,8 +52,8 @@ CREATE TABLE permissions (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -69,8 +69,8 @@ CREATE TABLE roles (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -86,8 +86,8 @@ CREATE TABLE role_permissions (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -105,8 +105,8 @@ CREATE TABLE tenant_user_roles (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -125,8 +125,8 @@ CREATE TABLE field_permissions (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -149,8 +149,8 @@ CREATE TABLE departments (
 
     -- TenantScopedMixin
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -170,8 +170,8 @@ CREATE TABLE designations (
 
     -- TenantScopedMixin
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -202,8 +202,8 @@ CREATE TABLE staff_profiles (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -223,8 +223,8 @@ CREATE TABLE staff_assignments (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -249,8 +249,8 @@ CREATE TABLE attendance_policies (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -268,8 +268,8 @@ CREATE TABLE shifts (
 
     -- TenantScopedMixin
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -296,8 +296,8 @@ CREATE TABLE attendance_records (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -319,8 +319,8 @@ CREATE TABLE leave_types (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -343,8 +343,8 @@ CREATE TABLE leave_requests (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -361,8 +361,8 @@ CREATE TABLE holidays (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -385,8 +385,8 @@ CREATE TABLE statuses (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -404,8 +404,8 @@ CREATE TABLE workflows (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -426,8 +426,8 @@ CREATE TABLE workflow_states (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -447,8 +447,8 @@ CREATE TABLE workflow_transitions (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -462,8 +462,8 @@ CREATE TABLE transition_rules (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -499,8 +499,8 @@ CREATE TABLE projects (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -519,8 +519,8 @@ CREATE TABLE project_members (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -553,8 +553,8 @@ CREATE TABLE tasks (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -572,8 +572,8 @@ CREATE TABLE task_assignees (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -591,8 +591,8 @@ CREATE TABLE task_dependencies (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -610,8 +610,8 @@ CREATE TABLE task_comments (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -643,8 +643,8 @@ CREATE TABLE files (
     -- TenantScopedMixin fields
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -660,8 +660,8 @@ CREATE TABLE task_attachments (
     -- TenantScopedMixin fields
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -686,8 +686,8 @@ CREATE TABLE expense_categories (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -720,8 +720,8 @@ CREATE TABLE reimbursement_claims (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -749,8 +749,8 @@ CREATE TABLE reimbursement_items (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -771,8 +771,8 @@ CREATE TABLE inventory_categories (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -790,8 +790,8 @@ CREATE TABLE inventory_locations (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -818,8 +818,8 @@ CREATE TABLE inventory_items (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -839,8 +839,8 @@ CREATE TABLE inventory_stock (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
 
@@ -869,8 +869,8 @@ CREATE TABLE inventory_transactions (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -890,8 +890,8 @@ CREATE TABLE approval_flows (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -915,8 +915,8 @@ CREATE TABLE approval_steps (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -930,16 +930,16 @@ CREATE TABLE approval_instances (
     requester_id UUID NOT NULL,
     status VARCHAR(20) DEFAULT 'pending',
     current_step_id UUID REFERENCES approval_steps(id) ON DELETE SET NULL,
-    started_at TIMESTAMP DEFAULT NOW(),
-    completed_at TIMESTAMP,
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
     final_decision VARCHAR(20),
     comments TEXT,
 
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -951,17 +951,17 @@ CREATE TABLE approval_assignments (
     step_id UUID NOT NULL REFERENCES approval_steps(id) ON DELETE CASCADE,
     approver_id UUID NOT NULL,
     status VARCHAR(20) DEFAULT 'pending',
-    assigned_at TIMESTAMP DEFAULT NOW(),
-    due_at TIMESTAMP,
-    decided_at TIMESTAMP,
+    assigned_at TIMESTAMPTZ DEFAULT NOW(),
+    due_at TIMESTAMPTZ,
+    decided_at TIMESTAMPTZ,
     comments TEXT,
     delegated_from UUID ,
 
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -990,8 +990,8 @@ CREATE TABLE audit_logs (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );
@@ -1013,8 +1013,8 @@ CREATE TABLE domain_events (
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
 );

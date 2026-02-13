@@ -1,9 +1,11 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
-from app.models.tenant import Workflow, WorkflowTransitions, Status, WorkflowState
+from app.models.tenant import Workflow, WorkflowTransitions, Status, WorkflowState, TransitionsRules
 from app.services.crud import CRUDService
 from app.schemas.workflow_schemas import WorkflowCreate, WorkflowUpdate, WorkflowStateBase, CreateWorkFlowState, UpdateWorkFlowState, WorkflowTransitionBase, CreateWorkflowTransition, UpdateWorkflowTransition
 from app.core.constants import DEFAULT_STATES, TRANSITION_MAP
+from datetime import datetime, timezone
+from fastapi import HTTPException, status
 
 
 class WorkflowService:
@@ -13,11 +15,11 @@ class WorkflowService:
         self.workflow_transition_crud = CRUDService(WorkflowTransitions)
         self.status_crud = CRUDService(Status)
         self.workflow_state_crud = CRUDService(WorkflowState)
+        self.transitions_rules_crud = CRUDService(TransitionsRules)
 
-    async def create_default_workflow(self, db: AsyncSession, project_id: str, user_id: str):
-        print('creating default workflow')
+    async def create_default_workflow(self, db: AsyncSession, user_id: str):
+
         workflow = WorkflowCreate(
-            project_id=project_id,
             name='Default Workflow',
             description='Default workflow for the project',
             is_default=True,
@@ -25,7 +27,7 @@ class WorkflowService:
             entity_type='project',
             created_by=user_id
         )
-        print('workflow',workflow.model_dump())
+        
         workflow = await self.workflow_crud.create(db, obj_in=workflow.model_dump())
         
         status_map = {}
@@ -43,13 +45,8 @@ class WorkflowService:
             )
             state = await self.workflow_state_crud.create(db, obj_in=state.model_dump())
             status_map[name] = state.id
-        print('status_map',status_map)
-
 
         for from_s, to_s, requires_approval in TRANSITION_MAP:
-            print('from_s',status_map[from_s])
-            print('to_s',status_map[to_s])
-            print('to_s',to_s)
 
             transition = CreateWorkflowTransition(
                 workflow_id=workflow.id,
@@ -65,4 +62,42 @@ class WorkflowService:
 
         await db.commit()
 
+        return workflow
+
+    async def delete_workflow(self, db: AsyncSession, workflow_id: str, user_id: str):
+        
+        # delete workflow
+        workflow = await self.workflow_crud.delete(db, id=workflow_id, user_id=user_id, soft=True) 
+        if not workflow:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+        
+        # delete workflow states
+        states = await self.workflow_state_crud.delete_by_field(
+            db, 
+            field="workflow_id", 
+            value=workflow_id, 
+            user_id= user_id,
+            soft=True
+        )
+        
+        # delete state transitions
+        transitions = await self.workflow_transition_crud.delete_by_field(
+            db, 
+            field="workflow_id", 
+            value=workflow_id, 
+            user_id= user_id,
+            soft=True
+        )
+        
+        # delete transition rules
+        if transitions:
+            for transition in transitions:
+                await self.transitions_rules_crud.delete_by_field(
+                    db, 
+                    field="transition_id", 
+                    value=transition.id, 
+                    user_id= user_id,
+                    soft=True
+                )
+        await db.commit()
         return workflow

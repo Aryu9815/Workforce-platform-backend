@@ -91,3 +91,15 @@ class TeamService:
         if not member:
             raise Exception(status=404, detail="Member not found")
         return member
+    
+    async def delete_project_members(self, db: AsyncSession, project_id: str, user_id: str):
+
+        members = await self.project_member_crud.delete_by_field(
+            db, 
+            field="project_id", 
+            value=project_id, 
+            user_id= user_id,
+            soft=True
+        )
+        await db.commit()
+        return members

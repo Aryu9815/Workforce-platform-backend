@@ -54,6 +54,7 @@ class ProjectCreate(ProjectBase):
     location: Optional[Dict[str, Any]] = None
     settings: Optional[Dict[str, Any]] = None
     custom_fields: Optional[Dict[str, Any]] = None
+    workflow_id: Optional[UUID] = None
     created_by: Optional[str] = None
 
 

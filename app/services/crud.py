@@ -93,7 +93,8 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             query = query.order_by(self.model.created_at.desc())
         
         # Apply pagination
-        query = query.offset(skip).limit(limit)
+        if limit > -1:
+            query = query.offset(skip).limit(limit)
         
         result = await db.execute(query)
         return result.scalars().all()
@@ -217,6 +218,39 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return None
         return await self.update(db, db_obj=db_obj, obj_in=obj_in, updated_by=updated_by)
     
+    async def delete_by_field(
+        self,
+        db: AsyncSession,
+        *,
+        field: str,
+        value: Any,
+        user_id: str,
+         
+        soft: bool = True
+    ) -> Optional[ModelType]:
+        """Delete a record (soft or hard delete)."""
+        if hasattr(self.model, field):
+            db_objs = await self.get_by_fields(
+                db, fields={field: value}, include_deleted=True, include_inactive=True
+            )
+            for db_obj in db_objs:
+                if soft and hasattr(self.model, 'is_deleted'):
+                    # Soft delete
+                    db_obj.updated_at = datetime.now(timezone.utc)
+                    db_obj.updated_by = user_id
+                    db_obj.is_deleted = True
+                    db_obj.is_active = False
+                    db.add(db_obj)
+                    logger.info(f"Soft deleted {self.model.__name__} where {field} is {value}")
+                else:
+                    # Hard delete
+                    await db.delete(db_obj)
+                    logger.info(f"Hard deleted {self.model.__name__} with {field} is {value}")
+            await db.flush()
+            return db_objs
+        else:
+            return None
+    
     async def delete(
         self,
         db: AsyncSession,
@@ -232,7 +266,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         if not db_obj:
             return None
         
-        if soft and hasattr(self.model, 'deleted_at'):
+        if soft and hasattr(self.model, 'is_deleted'):
             # Soft delete
             db_obj.updated_at = datetime.now(timezone.utc)
             db_obj.updated_by = user_id
