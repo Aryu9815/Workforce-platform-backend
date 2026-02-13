@@ -44,8 +44,6 @@ class TaskCreate(TaskBase):
     """Task creation schema."""
     project_id: UUID
     parent_task_id: Optional[UUID] = None
-    status_id: Optional[UUID] = None
-    assignee_ids: List[UUID] = []
     milestone: bool = False
     billable: bool = True
     location: Optional[Dict[str, Any]] = None
