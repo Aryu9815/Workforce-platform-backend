@@ -23,7 +23,7 @@ class Task(TenantBase, TenantScopedMixin):
     parent_task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
-    status_id = Column(UUID(as_uuid=True), ForeignKey("statuses.id", ondelete="SET NULL"), nullable=True)
+    workflow_state_id = Column(UUID(as_uuid=True), ForeignKey("workflow_states.id", ondelete="RESTRICT"), nullable=True)
     priority = Column(String(20), default="medium")
     task_type = Column(String(50), nullable=True)
     estimated_hours = Column(Numeric(6, 2), nullable=True)

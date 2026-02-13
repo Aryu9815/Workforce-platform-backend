@@ -22,6 +22,6 @@ class TenantMaster(CommonBase):
     is_active = Column(Boolean, default=True)
     is_deleted = Column(Boolean, default=False)
     tenant_metadata = Column(JSON, default={})
-    created_date = Column(TIMESTAMP, server_default=func.now())
-    updated_date = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    created_date = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_date = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     audit_log = Column(JSON, default=[])

@@ -54,6 +54,7 @@ class ProjectCreate(ProjectBase):
     location: Optional[Dict[str, Any]] = None
     settings: Optional[Dict[str, Any]] = None
     custom_fields: Optional[Dict[str, Any]] = None
+    workflow_id: Optional[UUID] = None
     created_by: Optional[str] = None
 
 
@@ -91,6 +92,7 @@ class UpdateProjectMember(BaseSchema):
     is_deleted: Optional[bool] = None
     is_active: Optional[bool] = None
     is_removed: Optional[bool] = None
+    updated_by: Optional[str] = None
 
 
 
@@ -100,8 +102,8 @@ class ProjectMemberResponse(TimestampSchema):
     project_id: Optional[UUID] = None
     staff_id: Optional[UUID] = None
     role: Optional[str] = None
-    joined_at: Optional[date] = None    
-    left_at: Optional[date] = None
+    joined_at: Optional[datetime] = None    
+    left_at: Optional[datetime] = None
     is_removed: Optional[bool] = None
     is_active: Optional[bool] = None
     is_deleted: Optional[bool] = None
@@ -123,3 +125,4 @@ class ProjectResponse(ProjectBase, TimestampSchema):
     deleted_at: Optional[datetime] = None
     manager_name: Optional[str] = None
     project_members: List[ProjectMemberResponse] = []
+    workflow_id: Optional[UUID] = None

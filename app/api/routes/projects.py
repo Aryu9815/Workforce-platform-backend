@@ -14,7 +14,8 @@ from app.api.schemas import (
 from app.schemas.project_schemas import (
     ProjectCreate,
     ProjectUpdate,
-    ProjectResponse
+    ProjectResponse,
+    UpdateProjectMember
 )
 from app.models.tenant import Project
 from app.db.base import get_db_session
@@ -86,7 +87,8 @@ async def list_projects(
             is_template=project.is_template,
             created_at=project.created_at,
             updated_at=project.updated_at,
-            manager_name=None 
+            manager_name=None,
+            workflow_id=project.workflow_id,
         ))
     
     return PaginatedResponse.create(
@@ -154,19 +156,19 @@ async def create_project(
     )
 
 
-@router.post("", response_model=ProjectMemberResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/member", response_model=ProjectMemberResponse, status_code=status.HTTP_201_CREATED)
 async def add_project_member(
     request: Request,
     project_data: CreateProjectMember,
     db: AsyncSession = Depends(get_db_session)
 ):
     """Create a new project."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
+    user_id = getattr(request.state, 'user_id', None)
     
     member = await team_service.add_member(
         db,
         data=project_data,
-        tenant_id=tenant_id
+        user_id=user_id
     )
     
     logger.info(f"Member added to Project: {member.id}")
@@ -201,32 +203,15 @@ async def update_project(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Update a project."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    # Track if status changed to completed
-    was_completed = project.status != "completed" and project_data.status == "completed"
-    
-    updated_project = await project_crud.update(
-        db,
-        db_obj=project,
-        obj_in=project_data.model_dump(exclude_unset=True)
-    )
+    updated_project = await project_service.update_project(db, project_id, user_id, project_data)
     
     # Publish event
     await publish_event(
         event_type=EventType.PROJECT_UPDATED,
         aggregate_type="project",
         aggregate_id=str(updated_project.id),
-        tenant_id=tenant_id,
         payload={
             "name": updated_project.name,
             "status": updated_project.status,
@@ -258,7 +243,6 @@ async def update_project(
         actual_cost=updated_project.actual_cost,
         progress_percentage=updated_project.progress_percentage,
         is_template=updated_project.is_template,
-        deleted_at=updated_project.deleted_at,
         created_at=updated_project.created_at,
         updated_at=updated_project.updated_at
     )
@@ -271,28 +255,13 @@ async def delete_project(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Soft delete a project."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
-    
-    project = await project_crud.delete(
-        db,
-        id=project_id,
-        tenant_id=tenant_id,
-        soft=True
-    )
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
+    project = await project_service.delete_project(db, project_id, user_id)
     # Publish event
     await publish_event(
         event_type=EventType.PROJECT_DELETED,
         aggregate_type="project",
         aggregate_id=str(project_id),
-        tenant_id=tenant_id,
         payload={
             "name": project.name,
             "deleted_by": user_id
@@ -302,36 +271,6 @@ async def delete_project(
     logger.info(f"Project deleted: {project_id}")
     
     return SuccessResponse(message="Project deleted successfully")
-
-
-@router.get("/{project_id}/stats")
-async def get_project_stats(
-    request: Request,
-    project_id: UUID,
-    db: AsyncSession = Depends(get_db_session)
-):
-    """Get project statistics."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
-    project = await project_crud.get(db, project_id, tenant_id=tenant_id)
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    # TODO: Calculate actual statistics
-    return {
-        "project_id": str(project_id),
-        "total_tasks": 0,
-        "completed_tasks": 0,
-        "in_progress_tasks": 0,
-        "overdue_tasks": 0,
-        "total_hours": 0,
-        "budget_utilization": 0,
-        "team_size": 0
-    }
 
 @router.get("/{project_id}/members")
 async def get_project_members(
@@ -344,3 +283,26 @@ async def get_project_members(
     
     members = await team_service.get_project_members(db, project_id)
     return members
+
+@router.delete("/member/{member_id}")
+async def remove_project_member(
+    request: Request,
+    member_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Remove a project member."""
+    user_id = getattr(request.state, 'user_id', None)
+    await team_service.remove_member(db, member_id, user_id)
+    return SuccessResponse(message="Member removed successfully")
+
+@router.put("/member/{member_id}", response_model=ProjectMemberResponse)
+async def remove_project_member(
+    request: Request,
+    member_id: UUID,
+    data: UpdateProjectMember,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Remove a project member."""
+    user_id = getattr(request.state, 'user_id', None)
+    return await team_service.update_member(db, member_id, data, user_id) 
+

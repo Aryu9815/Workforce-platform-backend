@@ -8,12 +8,14 @@ from uuid import UUID
 from datetime import datetime
 
 from app.api.schemas import (
-    TaskCreate,
-    TaskUpdate,
-    TaskResponse,
     PaginatedResponse,
     PaginationParams,
     SuccessResponse
+)
+from app.schemas.task_schemas import (
+    TaskCreate,
+    TaskResponse,
+    TaskUpdate
 )
 from app.models.tenant import Task, TaskAssignee
 from app.db.base import get_db_session
@@ -52,13 +54,12 @@ async def list_tasks(
     if priority:
         filters["priority"] = priority
     
-    total = await task_crud.count(db, tenant_id=tenant_id, filters=filters)
+    total = await task_crud.count(db, filters=filters)
     
     tasks = await task_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
-        tenant_id=tenant_id,
         filters=filters
     )
     
@@ -76,7 +77,7 @@ async def list_tasks(
             due_date=task.due_date,
             project_id=task.project_id,
             parent_task_id=task.parent_task_id,
-            status_id=task.status_id,
+            status_id=task.workflow_state_id,
             status_name=None,  # TODO: Fetch status name
             status_color=None,
             actual_hours=task.actual_hours,
@@ -86,7 +87,6 @@ async def list_tasks(
             progress_percentage=task.progress_percentage,
             milestone=task.milestone,
             billable=task.billable,
-            deleted_at=task.deleted_at,
             created_at=task.created_at,
             updated_at=task.updated_at,
             assignees=[]  # TODO: Fetch assignees
@@ -112,7 +112,6 @@ async def create_task(
     
     task = await task_service.create_task(
         db,
-        tenant_id=tenant_id,
         user_id=user_id,
         data=task_data
     )
@@ -122,28 +121,12 @@ async def create_task(
         event_type=EventType.TASK_CREATED,
         aggregate_type="task",
         aggregate_id=str(task.id),
-        tenant_id=tenant_id,
         payload={
             "title": task.title,
             "project_id": str(task.project_id),
-            "assignee_ids": [str(a) for a in task_data.assignee_ids],
             "created_by": user_id
         }
     )
-    
-    # Publish assignment events
-    for assignee_id in task_data.assignee_ids:
-        await publish_event(
-            event_type=EventType.TASK_ASSIGNED,
-            aggregate_type="task",
-            aggregate_id=str(task.id),
-            tenant_id=tenant_id,
-            payload={
-                "title": task.title,
-                "assignee_id": str(assignee_id),
-                "assigned_by": user_id
-            }
-        )
     
     logger.info(f"Task created: {task.id}")
     
@@ -159,7 +142,7 @@ async def create_task(
         due_date=task.due_date,
         project_id=task.project_id,
         parent_task_id=task.parent_task_id,
-        status_id=task.status_id,
+        status_id=task.workflow_state_id,
         actual_hours=task.actual_hours,
         actual_cost=task.actual_cost,
         completed_at=task.completed_at,
@@ -167,7 +150,6 @@ async def create_task(
         progress_percentage=task.progress_percentage,
         milestone=task.milestone,
         billable=task.billable,
-        deleted_at=task.deleted_at,
         created_at=task.created_at,
         updated_at=task.updated_at
     )
@@ -227,7 +209,7 @@ async def update_task(
     tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    task = await task_crud.get(db, task_id, tenant_id=tenant_id)
+    task = await task_crud.get(db, task_id)
     
     if not task:
         raise HTTPException(
@@ -248,13 +230,14 @@ async def update_task(
         db_obj=task,
         obj_in=update_data
     )
+    await db.commit()
+    await db.refresh(updated_task)
     
     # Publish event
     await publish_event(
         event_type=EventType.TASK_UPDATED,
         aggregate_type="task",
         aggregate_id=str(updated_task.id),
-        tenant_id=tenant_id,
         payload={
             "title": updated_task.title,
             "progress": updated_task.progress_percentage,
@@ -291,7 +274,7 @@ async def update_task(
         due_date=updated_task.due_date,
         project_id=updated_task.project_id,
         parent_task_id=updated_task.parent_task_id,
-        status_id=updated_task.status_id,
+        status_id=updated_task.workflow_state_id,
         actual_hours=updated_task.actual_hours,
         actual_cost=updated_task.actual_cost,
         completed_at=updated_task.completed_at,
@@ -299,7 +282,6 @@ async def update_task(
         progress_percentage=updated_task.progress_percentage,
         milestone=updated_task.milestone,
         billable=updated_task.billable,
-        deleted_at=updated_task.deleted_at,
         created_at=updated_task.created_at,
         updated_at=updated_task.updated_at
     )

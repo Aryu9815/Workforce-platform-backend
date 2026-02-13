@@ -94,3 +94,27 @@ class UpdateWorkflowTransition(BaseSchema):
     approval_flow_id: Optional[UUID] = None
     auto_transition: Optional[bool] = None
     condition_rules: Optional[dict] = None
+
+class WorkflowStateResponse(WorkflowStateBase):
+    """Workflow state response schema."""
+    id: UUID
+    workflow_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowResponse(WorkflowBase):
+    """Workflow state response schema."""
+    id: UUID
+    workflow_states: List[WorkflowStateResponse]
+    settings: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+class WorkflowTransitionResponse(WorkflowTransitionBase):
+    """Workflow state response schema."""
+    id: UUID
+    from_state_name: str 
+    to_state_name: str
+    created_at: datetime
+    updated_at: datetime
