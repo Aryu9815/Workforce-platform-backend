@@ -125,3 +125,4 @@ class ProjectResponse(ProjectBase, TimestampSchema):
     deleted_at: Optional[datetime] = None
     manager_name: Optional[str] = None
     project_members: List[ProjectMemberResponse] = []
+    workflow_id: Optional[UUID] = None

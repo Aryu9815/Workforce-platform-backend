@@ -87,7 +87,8 @@ async def list_projects(
             is_template=project.is_template,
             created_at=project.created_at,
             updated_at=project.updated_at,
-            manager_name=None 
+            manager_name=None,
+            workflow_id=project.workflow_id,
         ))
     
     return PaginatedResponse.create(

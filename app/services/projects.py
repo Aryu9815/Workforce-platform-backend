@@ -204,6 +204,7 @@ class ProjectService:
             actual_cost=project.actual_cost,
             progress_percentage=project.progress_percentage,
             is_template=project.is_template,
+            workflow_id=project.workflow_id,
             created_at=project.created_at,
             updated_at=project.updated_at
         )
