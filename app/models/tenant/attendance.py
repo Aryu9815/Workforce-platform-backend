@@ -64,7 +64,7 @@ class AttendanceRecord(TenantBase, TenantScopedMixin):
     status = Column(String(20), default="present")  # present, absent, late, half_day
     notes = Column(Text, nullable=True)
     is_manual_entry = Column(Boolean, default=False)
-    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
     
 
 class LeaveType(TenantBase, TenantScopedMixin):
@@ -95,7 +95,7 @@ class LeaveRequest(TenantBase, TenantScopedMixin):
     days_requested = Column(Numeric(4, 1), nullable=False)
     reason = Column(Text, nullable=True)
     status = Column(String(20), default="pending")
-    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     approval_notes = Column(Text, nullable=True)
     documents = Column(JSONB, default=list)

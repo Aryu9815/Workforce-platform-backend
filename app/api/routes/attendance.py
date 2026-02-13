@@ -2,27 +2,35 @@
 Attendance management API routes.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+
+# from scipy.fftpack import shift
+from app.models.tenant import Shift
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 from datetime import date, datetime, timedelta
-
-from app.api.schemas import (
+from datetime import datetime, timezone
+from app.models.tenant.staff import StaffProfile
+from app.schemas.attendance import (
     AttendanceRecordCreate,
     AttendanceRecordUpdate,
     AttendanceRecordResponse,
     LeaveRequestCreate,
     LeaveRequestUpdate,
     LeaveRequestResponse,
-    PaginatedResponse,
-    PaginationParams,
-    SuccessResponse
+   
 )
+from app.api.schemas import (
+     PaginatedResponse,
+    PaginationParams,
+    SuccessResponse)
 from app.models.tenant import AttendanceRecord, LeaveRequest, LeaveType
 from app.db.base import get_db_session
+from app.services.attendance import AttendanceService
 from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
+from app.services.leave import LeaveService
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/attendance", tags=["Attendance Management"])
@@ -30,8 +38,10 @@ router = APIRouter(prefix="/attendance", tags=["Attendance Management"])
 attendance_crud = CRUDService(AttendanceRecord)
 leave_crud = CRUDService(LeaveRequest)
 leave_type_crud = CRUDService(LeaveType)
-
-
+staff_crud = CRUDService(StaffProfile)  # Assuming staff_profiles is the table name for staff profiles
+attendance_service = AttendanceService()
+leave_service = LeaveService()
+leave_type_crud = CRUDService(LeaveType)
 @router.get("/records", response_model=PaginatedResponse)
 async def list_attendance(
     request: Request,
@@ -59,9 +69,9 @@ async def list_attendance(
         filters=filters,
         order_by="date"
     )
-    
     record_responses = []
     for record in records:
+        staff = await staff_crud.get(db, record.staff_id)
         record_responses.append(AttendanceRecordResponse(
             id=record.id,
             staff_id=record.staff_id,
@@ -77,7 +87,7 @@ async def list_attendance(
             notes=record.notes,
             created_at=record.created_at,
             updated_at=record.updated_at,
-            staff_name=None  # TODO: Fetch staff name
+            staff_name=staff.first_name + " " + staff.last_name if staff else None,
         ))
     
     return PaginatedResponse.create(
@@ -98,44 +108,13 @@ async def check_in(
     """Record staff check-in."""
     user_id = getattr(request.state, 'user_id', None)
     
-    today = date.today()
-    
-    # Check if already checked in today
-    existing = await attendance_crud.get_by_fields(
-        db,
-        fields={"staff_id": staff_id, "date": today},
+    record = await attendance_service.check_in(
+        db=db,
+        staff_id=staff_id,
+        user_id=user_id,
+        location=location,
     )
-    
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Already checked in today"
-        )
-    
-    # Create attendance record
-    record = await attendance_crud.create(
-        db,
-        obj_in={
-            "staff_id": staff_id,
-            "date": today,
-            "check_in": datetime.utcnow(),
-            "check_in_location": location,
-            "check_in_method": "web",
-            "status": "present"
-        }
-    )
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.ATTENDANCE_CHECK_IN,
-        aggregate_type="attendance",
-        aggregate_id=str(record.id),
-        payload={
-            "staff_id": str(staff_id),
-            "check_in_time": record.check_in.isoformat(),
-            "location": location
-        }
-    )
+
     
     logger.info(f"Staff {staff_id} checked in")
     
@@ -162,58 +141,19 @@ async def check_out(
     request: Request,
     staff_id: UUID,
     location: Optional[dict] = None,
+    notes: Optional[str] = None,
     db: AsyncSession = Depends(get_db_session)
 ):
     """Record staff check-out."""
-    
-    today = date.today()
-    
-    # Find today's record
-    records = await attendance_crud.get_by_fields(
-        db,
-        fields={"staff_id": staff_id, "date": today},
+    user_id = getattr(request.state, 'user_id', None)   
+    record = await attendance_service.check_out(
+        db=db,
+        staff_id=staff_id,
+        user_id=user_id,
+        location=location,
+        notes=notes,
     )
-    
-    if not records:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No check-in record found for today"
-        )
-    
-    record = records[0]
-    
-    if record.check_out:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Already checked out today"
-        )
-    
-    # Update record with check-out
-    check_out_time = datetime.utcnow()
-    record.check_out = check_out_time
-    record.check_out_location = location
-    record.check_out_method = "web"
-    
-    # Calculate work hours
-    if record.check_in:
-        duration = check_out_time - record.check_in
-        record.work_hours = duration.total_seconds() / 3600
-    
-    await db.flush()
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.ATTENDANCE_CHECK_OUT,
-        aggregate_type="attendance",
-        aggregate_id=str(record.id),
-        payload={
-            "staff_id": str(staff_id),
-            "check_out_time": record.check_out.isoformat(),
-            "work_hours": record.work_hours,
-            "location": location
-        }
-    )
-    
+   
     logger.info(f"Staff {staff_id} checked out")
     
     return AttendanceRecordResponse(
@@ -265,6 +205,8 @@ async def list_leave_requests(
     
     leave_responses = []
     for leave in leaves:
+        staff = await staff_crud.get(db, leave.staff_id)
+        leave_type = await leave_type_crud.get(db, leave.leave_type_id)
         leave_responses.append(LeaveRequestResponse(
             id=leave.id,
             staff_id=leave.staff_id,
@@ -280,8 +222,8 @@ async def list_leave_requests(
             documents=leave.documents or [],
             created_at=leave.created_at,
             updated_at=leave.updated_at,
-            staff_name=None,  # TODO: Fetch staff name
-            leave_type_name=None  # TODO: Fetch leave type name
+            staff_name=staff.first_name + " " + staff.last_name if staff else None,
+            leave_type_name= leave_type.name if leave_type else None
         ))
     
     return PaginatedResponse.create(
@@ -299,26 +241,9 @@ async def create_leave_request(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Create a new leave request."""
-    
-    leave = await leave_crud.create(
-        db,
-        obj_in=leave_data.model_dump()
-    )
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.LEAVE_REQUESTED,
-        aggregate_type="leave",
-        aggregate_id=str(leave.id),
-        payload={
-            "staff_id": str(leave.staff_id),
-            "leave_type_id": str(leave.leave_type_id),
-            "start_date": leave.start_date.isoformat(),
-            "end_date": leave.end_date.isoformat(),
-            "days": leave.days_requested
-        }
-    )
-    
+    current_user_id = getattr(request.state, 'user_id', None) 
+
+    leave = await leave_service.create_leave(db, leave_data, current_user_id)
     logger.info(f"Leave request created: {leave.id}")
     
     return LeaveRequestResponse(
@@ -349,42 +274,43 @@ async def approve_leave(
     """Approve or reject a leave request."""
     user_id = getattr(request.state, 'user_id', None)
     
-    leave = await leave_crud.get(db, leave_id)
+    # leave = await leave_crud.get(db, leave_id)
     
-    if not leave:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Leave request not found"
-        )
+    # if not leave:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND,
+    #         detail="Leave request not found"
+    #     )
     
-    if leave.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Leave request already {leave.status}"
-        )
-    
-    # Update leave
-    leave.status = approval_data.status
-    leave.approved_by = user_id
-    leave.approved_at = datetime.utcnow()
-    leave.approval_notes = approval_data.approval_notes
-    
-    await db.flush()
-    
-    # Publish event
-    if approval_data.status == "approved":
-        await publish_event(
-            event_type=EventType.LEAVE_APPROVED,
-            aggregate_type="leave",
-            aggregate_id=str(leave.id),
-            payload={
-                "staff_id": str(leave.staff_id),
-                "approved_by": user_id,
-                "start_date": leave.start_date.isoformat(),
-                "end_date": leave.end_date.isoformat()
-            }
-        )
-    
+    # if leave.status != "pending":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_409_CONFLICT,
+    #         detail=f"Leave request already {leave.status}"
+    #     )
+    # staff_profile = await staff_crud.get_by_user_id(db, user_id)
+    # staff_id = staff_profile.id if staff_profile else None
+    # # Update leave
+    # leave.status = approval_data.status
+    # leave.approved_by = staff_id
+    # leave.approved_at = datetime.now(timezone.utc)
+    # leave.approval_notes = approval_data.approval_notes
+    # await db.commit()
+    # # await db.flush()
+    # await db.refresh(leave)
+    # # Publish event
+    # if approval_data.status == "approved":
+    #     await publish_event(
+    #         event_type=EventType.LEAVE_APPROVED,
+    #         aggregate_type="leave",
+    #         aggregate_id=str(leave.id),
+    #         payload={
+    #             "staff_id": str(leave.staff_id),
+    #             "approved_by": user_id,
+    #             "start_date": leave.start_date.isoformat(),
+    #             "end_date": leave.end_date.isoformat()
+    #         }
+    #     )
+    leave = await leave_service.approve_leave(db, leave_id, approval_data, user_id)
     logger.info(f"Leave request {leave_id} {approval_data.status}")
     
     return LeaveRequestResponse(

@@ -17,6 +17,7 @@ from app.core.security import (
     verify_token
 )
 from app.core.config import settings
+from app.models.tenant.staff import StaffProfile
 from app.services.crud import CRUDService
 from app.utils.validators import validate_email, validate_password_strength, validate_phone
 logger = logging.getLogger(__name__)
@@ -364,3 +365,4 @@ class AuthService:
         
 # Global auth service instance
 auth_service = AuthService()
+staff_crud  = CRUDService(StaffProfile)

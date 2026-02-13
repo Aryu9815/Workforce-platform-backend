@@ -79,3 +79,20 @@ class StaffAssignment(TenantBase, TenantScopedMixin):
     end_date = Column(Date, nullable=True)
     is_primary = Column(Boolean, default=False)
     assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+class StaffLeaveBalance(TenantBase, TenantScopedMixin):
+    __tablename__ = "staff_leave_balances"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
+    leave_type_id = Column(UUID(as_uuid=True), ForeignKey("leave_types.id", ondelete="CASCADE"), nullable=False)
+
+    year = Column(Integer, nullable=False)
+
+    allocated_days = Column(Numeric(5,2), default=0)
+    used_days = Column(Numeric(5,2), default=0)
+    remaining_days = Column(Numeric(5,2), default=0)
+
+    __table_args__ = (
+        UniqueConstraint("staff_id", "leave_type_id", "year"),
+    )
