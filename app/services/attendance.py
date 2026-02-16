@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tenant import AttendanceRecord, Shift, LeaveRequest, Holiday
+from app.models.tenant import AttendanceRecord, Shift, LeaveRequest, Holiday , LeaveAccrualLog
 from app.services.crud import CRUDService
 from app.events.publisher import publish_event, EventType
 from app.models.tenant.staff import StaffProfile
@@ -19,6 +19,7 @@ class AttendanceService:
         self.leave_crud = CRUDService(LeaveRequest)
         self.holiday_crud = CRUDService(Holiday)
         self.staff_crud = CRUDService(StaffProfile)
+        self.accrual_log_crud = CRUDService(LeaveAccrualLog)
     # ==========================================================
     # CHECK IN
     # ==========================================================
@@ -240,9 +241,7 @@ class AttendanceService:
                 return None  # Not scheduled today
         # Monday = 0 ... Sunday = 6
 
-        if shift.days_of_week:
-            if today_weekday not in shift.days_of_week:
-                return None  # Not scheduled today
+        
 
         return shift
 

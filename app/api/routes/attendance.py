@@ -310,7 +310,13 @@ async def approve_leave(
     #             "end_date": leave.end_date.isoformat()
     #         }
     #     )
-    leave = await leave_service.approve_leave(db, leave_id, approval_data, user_id)
+    leave = await leave_service.approve_leave(
+        db=db,
+        leave_id=leave_id,
+        approver_id=user_id,
+        approval_status=approval_data.status,
+        notes=approval_data.approval_notes
+        )
     logger.info(f"Leave request {leave_id} {approval_data.status}")
     
     return LeaveRequestResponse(
@@ -389,3 +395,16 @@ async def get_attendance_stats(
             "personal": 3
         }
     }
+
+
+
+# Only super admin should access.
+@router.post("/admin/leave/accrue")
+async def run_accrual(
+    year: int,
+    month: int,
+    db: AsyncSession = Depends(get_db_session)
+):
+    service = LeaveService()
+    await service.accrue_monthly_leaves(db, year, month)
+    return {"message": "Accrual processed"}

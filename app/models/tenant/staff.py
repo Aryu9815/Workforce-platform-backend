@@ -64,22 +64,7 @@ class StaffProfile(TenantBase, TenantScopedMixin):
     emergency_contact = Column(JSONB, nullable=True)
     documents = Column(JSONB, default=list)
     custom_fields = Column(JSONB, default=dict)
-    
-
-class StaffAssignment(TenantBase, TenantScopedMixin):
-    """Staff project assignments."""
-    __tablename__ = "staff_assignments"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
-    project_id = Column(UUID(as_uuid=True), nullable=False)  # Will be FK to projects
-    role = Column(String(100), nullable=True)
-    allocation_percentage = Column(Integer, default=100)
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=True)
-    is_primary = Column(Boolean, default=False)
-    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-
+    shift_id = Column(UUID(as_uuid=True), ForeignKey("shifts.id", ondelete="SET NULL"), nullable=True)
 class StaffLeaveBalance(TenantBase, TenantScopedMixin):
     __tablename__ = "staff_leave_balances"
 
@@ -96,3 +81,18 @@ class StaffLeaveBalance(TenantBase, TenantScopedMixin):
     __table_args__ = (
         UniqueConstraint("staff_id", "leave_type_id", "year"),
     )
+    
+
+class StaffAssignment(TenantBase, TenantScopedMixin):
+    """Staff project assignments."""
+    __tablename__ = "staff_assignments"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), nullable=False)  # Will be FK to projects
+    role = Column(String(100), nullable=True)
+    allocation_percentage = Column(Integer, default=100)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=True)
+    is_primary = Column(Boolean, default=False)
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

@@ -99,6 +99,7 @@ class LeaveRequest(TenantBase, TenantScopedMixin):
     approved_at = Column(DateTime(timezone=True), nullable=True)
     approval_notes = Column(Text, nullable=True)
     documents = Column(JSONB, default=list)
+    is_payroll_deducted = Column(Boolean, default=False)
 
 
 class Holiday(TenantBase, TenantScopedMixin):
@@ -111,4 +112,23 @@ class Holiday(TenantBase, TenantScopedMixin):
     type = Column(String(20), default="public")
     is_recurring = Column(Boolean, default=False)
     description = Column(Text, nullable=True)
+    
+class LeaveAccrualLog(TenantBase, TenantScopedMixin):
+    """
+    Tracks monthly leave accrual execution.
+    Prevents duplicate accrual runs.
+    """
+    __tablename__ = "leave_accrual_logs"
 
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    status = Column(String(20), default="completed")  
+    # completed / failed / partial (future-safe design)
+
+    processed_at = Column(DateTime(timezone=True), default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("year", "month", name="uq_leave_accrual_year_month"),
+    )
