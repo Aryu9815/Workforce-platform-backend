@@ -29,20 +29,6 @@ tenant_id_ctx: ContextVar[Optional[str]] = ContextVar("tenant_id", default=None)
 sql_logger = logging.getLogger("sql_logger")
 
 
-# class TenantAwareQueryMixin:
-#     """Mixin to automatically filter queries by tenant_id."""
-    
-#     @classmethod
-#     def filter_by_tenant(cls, query, tenant_id: Optional[str] = None):
-#         """Filter query by tenant_id if the model has tenant_id column."""
-#         if hasattr(cls, 'tenant_id'):
-#             if tenant_id is None:
-#                 tenant_id = tenant_id_ctx.get()
-#             if tenant_id:
-#                 return query.filter(cls.tenant_id == tenant_id)
-#         return query
-
-
 class DatabaseManager:
     """Manages database connections and sessions."""
     
@@ -115,22 +101,6 @@ class DatabaseManager:
 # Global database manager instance
 db_manager = DatabaseManager()
 
-
-# async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-#     """
-#     Dependency for getting database sessions.
-#     Usage: Depends(get_db_session)
-#     """
-#     async with db_manager.async_session_maker() as session:
-#         try:
-#             yield session
-#             await session.commit()
-#         except Exception:
-#             await session.rollback()
-#             raise
-#         finally:
-#             await session.close()
-
 async def get_common_db(request: Request=None):
     session_maker = await get_common_session_maker()
     async with session_maker() as session:
@@ -159,6 +129,10 @@ async def get_db_session(
     async with async_session_maker() as session:
         try:
             yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             print("Closing session")
             await session.close()

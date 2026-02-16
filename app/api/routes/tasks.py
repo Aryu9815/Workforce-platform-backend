@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
 
 from app.api.schemas import (
     PaginatedResponse,
@@ -15,7 +14,10 @@ from app.api.schemas import (
 from app.schemas.task_schemas import (
     TaskCreate,
     TaskResponse,
-    TaskUpdate
+    TaskUpdate,
+    CommentCreate,
+    CommentResponse,
+    CommentUpdate
 )
 from app.models.tenant import Task, TaskAssignee
 from app.db.base import get_db_session
@@ -77,8 +79,8 @@ async def list_tasks(
             due_date=task.due_date,
             project_id=task.project_id,
             parent_task_id=task.parent_task_id,
-            status_id=task.workflow_state_id,
-            status_name=None,  # TODO: Fetch status name
+            workflow_state_id=task.workflow_state_id,
+            status_name=None,
             status_color=None,
             actual_hours=task.actual_hours,
             actual_cost=task.actual_cost,
@@ -89,7 +91,7 @@ async def list_tasks(
             billable=task.billable,
             created_at=task.created_at,
             updated_at=task.updated_at,
-            assignees=[]  # TODO: Fetch assignees
+            assignees=[]
         ))
     
     return PaginatedResponse.create(
@@ -162,40 +164,8 @@ async def get_task(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific task by ID."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    task = await task_crud.get(db, task_id, tenant_id=tenant_id)
-    
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    
-    return TaskResponse(
-        id=task.id,
-        title=task.title,
-        description=task.description,
-        priority=task.priority,
-        task_type=task.task_type,
-        estimated_hours=task.estimated_hours,
-        estimated_cost=task.estimated_cost,
-        start_date=task.start_date,
-        due_date=task.due_date,
-        project_id=task.project_id,
-        parent_task_id=task.parent_task_id,
-        status_id=task.status_id,
-        actual_hours=task.actual_hours,
-        actual_cost=task.actual_cost,
-        completed_at=task.completed_at,
-        created_by=task.created_by,
-        progress_percentage=task.progress_percentage,
-        milestone=task.milestone,
-        billable=task.billable,
-        deleted_at=task.deleted_at,
-        created_at=task.created_at,
-        updated_at=task.updated_at
-    )
+    return await task_service.get_task(db, task_id)
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
@@ -206,32 +176,14 @@ async def update_task(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Update a task."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    task = await task_crud.get(db, task_id)
-    
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    
-    # Check if task is being completed
-    was_completed = task.progress_percentage < 100 and task_data.progress_percentage == 100
-    
-    update_data = task_data.model_dump(exclude_unset=True)
-    
-    if was_completed:
-        update_data["completed_at"] = datetime.utcnow()
-    
-    updated_task = await task_crud.update(
+    updated_task = await task_service.update_task(
         db,
-        db_obj=task,
-        obj_in=update_data
+        task_id=task_id,
+        user_id=user_id,
+        data=task_data
     )
-    await db.commit()
-    await db.refresh(updated_task)
     
     # Publish event
     await publish_event(
@@ -244,21 +196,6 @@ async def update_task(
             "updated_by": user_id
         }
     )
-    
-    # Publish completion event
-    if was_completed:
-        await publish_event(
-            event_type=EventType.TASK_COMPLETED,
-            aggregate_type="task",
-            aggregate_id=str(updated_task.id),
-            tenant_id=tenant_id,
-            payload={
-                "title": updated_task.title,
-                "project_id": str(updated_task.project_id),
-                "actual_hours": updated_task.actual_hours,
-                "completed_by": user_id
-            }
-        )
     
     logger.info(f"Task updated: {updated_task.id}")
     
@@ -274,7 +211,7 @@ async def update_task(
         due_date=updated_task.due_date,
         project_id=updated_task.project_id,
         parent_task_id=updated_task.parent_task_id,
-        status_id=updated_task.workflow_state_id,
+        workflow_state_id=updated_task.workflow_state_id,
         actual_hours=updated_task.actual_hours,
         actual_cost=updated_task.actual_cost,
         completed_at=updated_task.completed_at,
@@ -385,3 +322,72 @@ async def assign_task(
     logger.info(f"Task {task_id} assigned to {len(assignee_ids)} users")
     
     return SuccessResponse(message="Task assigned successfully")
+
+@router.post("/{task_id}/comments", response_model=CommentResponse)
+async def add_comment(
+    request: Request,
+    task_id: UUID,
+    comment_data: CommentCreate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    
+    """Add a comment to a task."""  
+    user_id = getattr(request.state, 'user_id', None)
+    
+    comment = await task_service.add_task_comment(
+        db,
+        data=comment_data,
+        user_id=user_id
+    )
+
+    return CommentResponse(
+        id=comment.id,
+        task_id=comment.task_id,
+        user_id=comment.user_id,
+        content=comment.content,
+        is_internal=comment.is_internal,
+        parent_comment_id=comment.parent_comment_id,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+        created_by=comment.created_by,
+        updated_by=comment.updated_by
+    )
+
+
+@router.get("/{task_id}/comments", response_model=List[CommentResponse])
+async def get_comments(
+    request: Request,
+    task_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get all comments for a task."""
+    
+    return await task_service.get_comments(db, task_id)
+
+@router.delete("/{task_id}/comments/{comment_id}", response_model=SuccessResponse)
+async def delete_comment(
+    request: Request,
+    task_id: UUID,
+    comment_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Delete a comment."""
+    user_id = getattr(request.state, 'user_id', None)
+    
+    await task_service.delete_comment(db, comment_id, user_id)
+    
+    return SuccessResponse(message="Comment deleted successfully")
+
+
+@router.put("/{task_id}/comments/{comment_id}", response_model=CommentResponse)
+async def update_comment(
+    request: Request,
+    task_id: UUID,
+    comment_id: UUID,
+    comment_data: CommentUpdate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    user_id = getattr(request.state, 'user_id', None)
+    
+    return await task_service.update_comment(db, comment_id, user_id, comment_data)
+    
