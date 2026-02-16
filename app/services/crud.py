@@ -62,7 +62,20 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         result = await db.execute(query)
         return result.scalar_one_or_none()
-    
+    async def get_by_user_id(
+        self,
+        db: AsyncSession,
+        user_id: Union[str, UUID],
+        include_deleted: bool = False,
+        include_inactive: bool = False
+    ) -> Optional[ModelType]:
+        """Get a single record by user_id."""
+        query = select(self.model).where(self.model.user_id == user_id)
+        query = self._apply_soft_delete_filter(query, include_deleted)
+        query = self._apply_is_active_filter(query, include_inactive)
+        
+        result = await db.execute(query)
+        return result.scalar_one_or_none()  
     async def get_multi(
         self,
         db: AsyncSession,

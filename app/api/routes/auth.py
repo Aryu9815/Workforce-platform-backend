@@ -18,7 +18,8 @@ from app.schemas.auth_schemas import (
     RefreshTokenRequest,
     ChangePasswordRequest
 )
-from app.services.auth import auth_service
+from app.services.auth import auth_service , staff_crud
+
 from app.db.base import get_db_session , get_common_db
 from app.core.config import settings
 from app.core.logging_config import get_logger
@@ -204,7 +205,8 @@ async def change_password(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
     request: Request,
-    db: AsyncSession = Depends(get_common_db)
+    common_db: AsyncSession = Depends(get_common_db),
+    db: AsyncSession = Depends(get_db_session)
 ):
     """Get current authenticated user details."""
     user_id = getattr(request.state, 'user_id', None)
@@ -215,15 +217,15 @@ async def get_current_user(
             detail="Authentication required"
         )
     
-    user = await auth_service.user_crud.get(db, user_id)
+    user = await auth_service.user_crud.get(common_db, user_id)
     
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
-    return UserResponse(
+    staff= await staff_crud.get_by_user_id(db, user_id)
+    user_response = UserResponse(
         id=user.id,
         email=user.email,
         first_name=user.first_name,
@@ -236,6 +238,11 @@ async def get_current_user(
         created_at=user.created_at,
         updated_at=user.updated_at
     )
+    if staff:
+        user_response.staff_id = staff.id
+        user_response.department_id = staff.department_id
+        user_response.designation_id = staff.designation_id
+    return user_response
 
 
 @router.get("/tenants", response_model=List[TenantListResponse])

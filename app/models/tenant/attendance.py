@@ -64,7 +64,7 @@ class AttendanceRecord(TenantBase, TenantScopedMixin):
     status = Column(String(20), default="present")  # present, absent, late, half_day
     notes = Column(Text, nullable=True)
     is_manual_entry = Column(Boolean, default=False)
-    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
     
 
 class LeaveType(TenantBase, TenantScopedMixin):
@@ -95,10 +95,11 @@ class LeaveRequest(TenantBase, TenantScopedMixin):
     days_requested = Column(Numeric(4, 1), nullable=False)
     reason = Column(Text, nullable=True)
     status = Column(String(20), default="pending")
-    approved_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     approval_notes = Column(Text, nullable=True)
     documents = Column(JSONB, default=list)
+    is_payroll_deducted = Column(Boolean, default=False)
 
 
 class Holiday(TenantBase, TenantScopedMixin):
@@ -111,4 +112,23 @@ class Holiday(TenantBase, TenantScopedMixin):
     type = Column(String(20), default="public")
     is_recurring = Column(Boolean, default=False)
     description = Column(Text, nullable=True)
+    
+class LeaveAccrualLog(TenantBase, TenantScopedMixin):
+    """
+    Tracks monthly leave accrual execution.
+    Prevents duplicate accrual runs.
+    """
+    __tablename__ = "leave_accrual_logs"
 
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    status = Column(String(20), default="completed")  
+    # completed / failed / partial (future-safe design)
+
+    processed_at = Column(DateTime(timezone=True), default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("year", "month", name="uq_leave_accrual_year_month"),
+    )
