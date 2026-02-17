@@ -53,25 +53,32 @@ class LeaveService:
                 },
             )
 
-            if not balance:
-                # raise HTTPException(400, "Leave balance not initialized")
-                # Auto-initialize balance if not found (edge case) future create api schedule job to initialize all balances at year start
-                balance = await self.leave_balance_crud.create(
-                    db,
-                    obj_in={
-                        "staff_id": leave.staff_id,
-                        "leave_type_id": leave.leave_type_id,
-                        "year": leave.start_date.year,
-                        "allocated_days": Decimal(leave_type.max_days_per_year or 0),
-                        "used_days": Decimal("0"),
-                        "remaining_days": Decimal(leave_type.max_days_per_year or 0),
-                        "created_by": "system"
-                    }
-                )
-            else :
-                balance = balance[0]
+            # if not balance:
+            #     # raise HTTPException(400, "Leave balance not initialized")
+            #     # Auto-initialize balance if not found (edge case) future create api schedule job to initialize all balances at year start
+            #     balance = await self.leave_balance_crud.create(
+            #         db,
+            #         obj_in={
+            #             "staff_id": leave.staff_id,
+            #             "leave_type_id": leave.leave_type_id,
+            #             "year": leave.start_date.year,
+            #             "allocated_days": Decimal(leave_type.max_days_per_year or 0),
+            #             "used_days": Decimal("0"),
+            #             "remaining_days": Decimal(leave_type.max_days_per_year or 0),
+            #             "created_by": "system"
+            #         }
+            #     )
+            # else :
+            #     balance = balance[0]
 
-            
+            if not balance:
+                raise HTTPException(
+                    400,
+                    "Leave balance not initialized. Accrual not processed for this period."
+                )
+
+            balance = balance[0]
+
 
             # 3️⃣ Deduct balance
             
@@ -181,12 +188,26 @@ class LeaveService:
         month: int,
     ):
         """
-        Accrue monthly leave for all active staff.
-        Prevents duplicate runs using LeaveAccrualLog.
-        Fully transactional.
+        Strict ERP Monthly Accrual Engine
+
+        - Prevents duplicate runs
+        - Prevents future accrual
+        - Respects join date
+        - Accrues only paid leave
+        - Fully transactional
         """
 
-        # 1️⃣ Check duplicate accrual
+        # 🔐 0️⃣ Validate month range
+        if month < 1 or month > 12:
+            raise HTTPException(400, "Invalid month value")
+
+        # 🔐 1️⃣ Prevent future accrual
+        today = datetime.now().date()
+
+        if year > today.year or (year == today.year and month > today.month):
+            raise HTTPException(400, "Cannot accrue future period")
+
+        # 🔐 2️⃣ Check duplicate accrual
         existing = await self.accrual_log_crud.get_by_fields(
             db,
             fields={
@@ -203,13 +224,16 @@ class LeaveService:
 
         try:
 
-            # 2️⃣ Fetch leave types with annual allocation
+            # 3️⃣ Fetch active leave types (paid only)
             leave_types = await self.leave_type_crud.get_multi(
                 db,
-                filters={"is_active": True}
+                filters={
+                    "is_active": True,
+                    "is_paid": True
+                }
             )
 
-            # 3️⃣ Fetch active staff only
+            # 4️⃣ Fetch active staff
             staff_members = await self.staff_crud.get_multi(
                 db,
                 filters={"is_active": True},
@@ -222,12 +246,22 @@ class LeaveService:
                 if staff.exit_date:
                     continue
 
+                # Skip if joined after this accrual month
+                if staff.join_date.year > year:
+                    continue
+
+                if (
+                    staff.join_date.year == year
+                    and staff.join_date.month > month
+                ):
+                    continue
+
                 for lt in leave_types:
 
                     if not lt.max_days_per_year:
                         continue
 
-                    # 4️⃣ Calculate monthly accrual
+                    # 5️⃣ Calculate monthly accrual
                     monthly_accrual = (
                         Decimal(str(lt.max_days_per_year)) / Decimal("12")
                     ).quantize(Decimal("0.01"))
@@ -259,7 +293,7 @@ class LeaveService:
                             }
                         )
 
-            # 5️⃣ Create accrual log ONLY AFTER SUCCESS
+            # 6️⃣ Log accrual execution (financial control)
             await self.accrual_log_crud.create(
                 db,
                 obj_in={
@@ -272,9 +306,9 @@ class LeaveService:
 
             await db.commit()
 
-        except Exception as e:
+        except Exception:
             await db.rollback()
-            raise e
+            raise
 
     async def carry_forward_leaves(self, db: AsyncSession, year: int):
 
