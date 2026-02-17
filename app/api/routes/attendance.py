@@ -398,13 +398,3 @@ async def get_attendance_stats(
 
 
 
-# Only super admin should access.
-@router.post("/admin/leave/accrue")
-async def run_accrual(
-    year: int,
-    month: int,
-    db: AsyncSession = Depends(get_db_session)
-):
-    service = LeaveService()
-    await service.accrue_monthly_leaves(db, year, month)
-    return {"message": "Accrual processed"}

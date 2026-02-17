@@ -12,6 +12,8 @@ from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
 from app.db.base import db_manager
 from app.events import register_event_handlers
+from app.core.scheduler import scheduler, monthly_accrual_job
+
 from app.middleware import (
     AuthMiddleware,
     TenantResolutionMiddleware,
@@ -68,12 +70,23 @@ async def lifespan(app: FastAPI):
     # Register event handlers
     register_event_handlers()
     logger.info("Event handlers registered")
-    
+    # ✅ START SCHEDULER HERE
+    scheduler.add_job(
+        monthly_accrual_job,
+        trigger="cron",
+        day=1,
+        hour=0,
+        minute=5,
+    )
+    scheduler.start()
+    logger.info("Scheduler started")
     yield
     
     # Shutdown
     logger.info("Shutting down application")
-    
+    scheduler.shutdown()
+    logger.info("Scheduler stopped")
+
     # Close database connections
     await db_manager.close()
     logger.info("Database connections closed")

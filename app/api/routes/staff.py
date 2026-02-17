@@ -3,7 +3,7 @@ Staff management API routes.
 """
 
 from sqlalchemy import select
-
+from app.models.tenant import StaffLeaveBalance
 from app.core.security import hash_password
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +54,7 @@ staff_crud = CRUDService(StaffProfile)
 department_crud = CRUDService(Department)
 designation_crud = CRUDService(Designation)
 staff_service = StaffService()
-
+leave_balance_crud= CRUDService(StaffLeaveBalance)
 def get_department( db: AsyncSession, department_id: UUID):
     return department_crud.get(db, department_id)
 def get_designation(db: AsyncSession, designation_id: UUID):
@@ -527,7 +527,7 @@ async def get_staff(
     """Get a specific staff member by ID."""
     
     staff = await staff_crud.get(db, staff_id)
-    
+    # leave_balance = await leave_balance_crud.get_by_user_id(db ,staff_id )
     if not staff:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
