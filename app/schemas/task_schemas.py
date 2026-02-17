@@ -43,6 +43,7 @@ class TaskBase(BaseSchema):
 class TaskCreate(TaskBase):
     """Task creation schema."""
     project_id: UUID
+    sprint_id: UUID
     parent_task_id: Optional[UUID] = None
     milestone: bool = False
     billable: bool = True

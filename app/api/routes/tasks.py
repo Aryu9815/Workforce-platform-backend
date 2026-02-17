@@ -42,11 +42,10 @@ async def list_tasks(
     project_id: Optional[UUID] = None,
     status_id: Optional[UUID] = None,
     priority: Optional[str] = None,
-    assignee_id: Optional[UUID] = None,
+    sprint_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db_session)
 ):
     """List all tasks with filtering."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     filters = {}
     if project_id:
@@ -55,6 +54,8 @@ async def list_tasks(
         filters["status_id"] = status_id
     if priority:
         filters["priority"] = priority
+    if sprint_id:
+        filters["sprint_id"] = sprint_id
     
     total = await task_crud.count(db, filters=filters)
     
@@ -231,28 +232,15 @@ async def delete_task(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Soft delete a task."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    task = await task_crud.delete(
-        db,
-        id=task_id,
-        tenant_id=tenant_id,
-        soft=True
-    )
-    
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
+    task = await task_service.delete_task(db, task_id, user_id)
     
     # Publish event
     await publish_event(
         event_type=EventType.TASK_DELETED,
         aggregate_type="task",
         aggregate_id=str(task_id),
-        tenant_id=tenant_id,
         payload={
             "title": task.title,
             "deleted_by": user_id
@@ -264,69 +252,9 @@ async def delete_task(
     return SuccessResponse(message="Task deleted successfully")
 
 
-@router.post("/{task_id}/assign", response_model=SuccessResponse)
-async def assign_task(
-    request: Request,
-    task_id: UUID,
-    assignee_ids: List[UUID],
-    db: AsyncSession = Depends(get_db_session)
-):
-    """Assign task to staff members."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    user_id = getattr(request.state, 'user_id', None)
-    
-    task = await task_crud.get(db, task_id, tenant_id=tenant_id)
-    
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    
-    # Remove existing assignees
-    existing = await task_assignee_crud.get_by_fields(
-        db,
-        fields={"task_id": task_id},
-        tenant_id=tenant_id
-    )
-    for assignee in existing:
-        await db.delete(assignee)
-    
-    # Add new assignees
-    for i, assignee_id in enumerate(assignee_ids):
-        await task_assignee_crud.create(
-            db,
-            obj_in={
-                "task_id": task_id,
-                "staff_id": assignee_id,
-                "assigned_by": user_id,
-                "is_primary": i == 0
-            },
-            tenant_id=tenant_id
-        )
-    
-    # Publish events
-    for assignee_id in assignee_ids:
-        await publish_event(
-            event_type=EventType.TASK_ASSIGNED,
-            aggregate_type="task",
-            aggregate_id=str(task_id),
-            tenant_id=tenant_id,
-            payload={
-                "title": task.title,
-                "assignee_id": str(assignee_id),
-                "assigned_by": user_id
-            }
-        )
-    
-    logger.info(f"Task {task_id} assigned to {len(assignee_ids)} users")
-    
-    return SuccessResponse(message="Task assigned successfully")
-
 @router.post("/{task_id}/comments", response_model=CommentResponse)
 async def add_comment(
     request: Request,
-    task_id: UUID,
     comment_data: CommentCreate,
     db: AsyncSession = Depends(get_db_session)
 ):
@@ -361,13 +289,11 @@ async def get_comments(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get all comments for a task."""
-    
     return await task_service.get_comments(db, task_id)
 
 @router.delete("/{task_id}/comments/{comment_id}", response_model=SuccessResponse)
 async def delete_comment(
     request: Request,
-    task_id: UUID,
     comment_id: UUID,
     db: AsyncSession = Depends(get_db_session)
 ):
@@ -382,7 +308,6 @@ async def delete_comment(
 @router.put("/{task_id}/comments/{comment_id}", response_model=CommentResponse)
 async def update_comment(
     request: Request,
-    task_id: UUID,
     comment_id: UUID,
     comment_data: CommentUpdate,
     db: AsyncSession = Depends(get_db_session)
@@ -390,4 +315,3 @@ async def update_comment(
     user_id = getattr(request.state, 'user_id', None)
     
     return await task_service.update_comment(db, comment_id, user_id, comment_data)
-    

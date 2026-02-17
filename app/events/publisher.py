@@ -45,6 +45,12 @@ class EventType(str, Enum):
     TASK_ASSIGNED = "task.assigned"
     TASK_COMPLETED = "task.completed"
     
+    SPRINT_CREATED = "sprint.created"
+    SPRINT_UPDATED = "sprint.updated"
+    SPRINT_DELETED = "sprint.deleted"
+    SPRINT_ASSIGNED = "sprint.assigned"
+    SPRINT_COMPLETED = "sprint.completed"
+    
     # Attendance events
     ATTENDANCE_CHECK_IN = "attendance.check_in"
     ATTENDANCE_CHECK_OUT = "attendance.check_out"

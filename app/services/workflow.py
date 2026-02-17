@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
-from app.models.tenant import Workflow, WorkflowTransitions, Status, WorkflowState, TransitionsRules
+from app.models.tenant import Workflow, WorkflowTransitions, WorkflowState, TransitionsRules
 from app.services.crud import CRUDService
 from app.schemas.workflow_schemas import WorkflowCreate, WorkflowUpdate, WorkflowStateBase, CreateWorkFlowState, UpdateWorkFlowState, WorkflowTransitionBase, CreateWorkflowTransition, UpdateWorkflowTransition, WorkflowTransitionResponse
 from app.core.constants import DEFAULT_STATES, TRANSITION_MAP
@@ -14,7 +14,6 @@ class WorkflowService:
     def __init__(self):
         self.workflow_crud = CRUDService(Workflow)
         self.workflow_transition_crud = CRUDService(WorkflowTransitions)
-        self.status_crud = CRUDService(Status)
         self.workflow_state_crud = CRUDService(WorkflowState)
         self.transitions_rules_crud = CRUDService(TransitionsRules)
 
