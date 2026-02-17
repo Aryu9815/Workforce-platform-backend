@@ -49,13 +49,14 @@ class TaskCreate(TaskBase):
     location: Optional[Dict[str, Any]] = None
     custom_fields: Optional[Dict[str, Any]] = None
     tags: List[str] = []
+    assignee_ids: List[UUID] = []
 
 
 class TaskUpdate(BaseSchema):
     """Task update schema."""
     title: Optional[str] = None
     description: Optional[str] = None
-    status_id: Optional[UUID] = None
+    workflow_state_id: Optional[UUID] = None
     priority: Optional[TaskPriority] = None
     estimated_hours: Optional[float] = None
     actual_hours: Optional[float] = None
@@ -71,15 +72,38 @@ class TaskResponse(TaskBase, TimestampSchema):
     id: UUID
     project_id: UUID
     parent_task_id: Optional[UUID] = None
-    status_id: Optional[UUID] = None
-    status_name: Optional[str] = None
-    status_color: Optional[str] = None
+    workflow_state_id: Optional[UUID] = None
+    workflow_state_name: Optional[str] = None
     actual_hours: float
     actual_cost: float
-    completed_at: Optional[datetime] = None
+    updated_by: Optional[UUID] = None
     created_by: UUID
     progress_percentage: int
     milestone: bool
     billable: bool
-    deleted_at: Optional[datetime] = None
     assignees: List[Dict[str, Any]] = []
+
+class CommentBase(BaseSchema):
+    """Base comment schema."""
+    content: str
+    is_internal: bool = False
+    parent_comment_id: Optional[UUID] = None
+
+
+class CommentCreate(CommentBase):
+    """Comment creation schema."""
+    task_id: UUID
+
+
+class CommentUpdate(BaseSchema):
+    """Comment update schema."""
+    content: Optional[str] = None
+    is_internal: Optional[bool] = None
+
+class CommentResponse(CommentBase, TimestampSchema):
+    """Comment response schema."""
+    id: UUID
+    task_id: UUID
+    user_id: UUID
+    updated_by: Optional[UUID] = None
+    created_by: UUID

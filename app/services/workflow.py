@@ -216,3 +216,11 @@ class WorkflowService:
         if not transition:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transition not found")
         return transition
+    
+    async def verify_transition(self, db: AsyncSession, to_state_id: str, from_state_id: str):
+        transitions = await self.workflow_transition_crud.get_by_fields(
+            db, fields={"to_state_id": to_state_id, "from_state_id": from_state_id}
+        )
+        if not transitions:
+            return False
+        return True
