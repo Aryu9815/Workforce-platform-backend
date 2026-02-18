@@ -11,3 +11,9 @@ TRANSITION_MAP = [
     ("Review", "Done", False),
     ("Review", "In Progress", False),
 ]
+
+AVAILABLE="available"
+ASSIGNED='assigned'
+MAINTENANCE="maintenance"
+LOST="lost"
+DISPOSED="disposed"
