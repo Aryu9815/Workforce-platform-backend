@@ -31,6 +31,7 @@ from app.api.routes import (
     inventory_router,
     reimbursements_router,
     workflow_router,
+    assets_router
 )
 
 # Setup logging
@@ -149,7 +150,7 @@ app.include_router(attendance_router, prefix=f"{API_V1_PREFIX}")
 app.include_router(inventory_router, prefix=f"{API_V1_PREFIX}")
 app.include_router(reimbursements_router, prefix=f"{API_V1_PREFIX}")
 app.include_router(workflow_router, prefix=f"{API_V1_PREFIX}")
-
+app.include_router(assets_router , prefix=f"{API_V1_PREFIX}")
 
 
 # Dashboard endpoint
