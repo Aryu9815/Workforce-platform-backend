@@ -31,11 +31,8 @@ from app.api.routes import (
     inventory_router,
     reimbursements_router,
     workflow_router,
-<<<<<<< HEAD
-    assets_router
-=======
+    assets_router,
     sprint_router,
->>>>>>> db63484203a2ced45c58dc506a87e8dfa991751a
 )
 
 # Setup logging
