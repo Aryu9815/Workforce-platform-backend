@@ -1,8 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from uuid import uuid4
 from app.models.tenant import ProjectMember, StaffProfile
-from app.schemas.project_schemas import ProjectMemberBase, CreateProjectMember, UpdateProjectMember
+from app.schemas.project_schemas import CreateProjectMember, UpdateProjectMember
 from app.services.crud import CRUDService
 from fastapi import HTTPException, status
 from datetime import datetime, timezone

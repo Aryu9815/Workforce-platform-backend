@@ -54,8 +54,67 @@ async def list_tasks(
         filters["status_id"] = status_id
     if priority:
         filters["priority"] = priority
-    if sprint_id:
-        filters["sprint_id"] = sprint_id
+    filters["sprint_id"] = sprint_id
+    
+    total = await task_crud.count(db, filters=filters)
+    
+    tasks = await task_crud.get_multi(
+        db,
+        skip=pagination.skip,
+        limit=pagination.limit,
+        filters=filters
+    )
+    
+    task_responses = []
+    for task in tasks:
+        task_responses.append(TaskResponse(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            priority=task.priority,
+            task_type=task.task_type,
+            estimated_hours=task.estimated_hours,
+            estimated_cost=task.estimated_cost,
+            start_date=task.start_date,
+            due_date=task.due_date,
+            project_id=task.project_id,
+            parent_task_id=task.parent_task_id,
+            workflow_state_id=task.workflow_state_id,
+            status_name=None,
+            status_color=None,
+            actual_hours=task.actual_hours,
+            actual_cost=task.actual_cost,
+            completed_at=task.completed_at,
+            created_by=task.created_by,
+            progress_percentage=task.progress_percentage,
+            milestone=task.milestone,
+            billable=task.billable,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            assignees=[]
+        ))
+    
+    return PaginatedResponse.create(
+        items=task_responses,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size
+    )
+
+
+@router.get("/{proejct_id}/backlogs", response_model=PaginatedResponse)
+async def list_backlog_tasks(
+    request: Request,
+    pagination: PaginationParams = Depends(),
+    project_id: Optional[UUID] = None,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """List all tasks with filtering."""
+    
+    filters = {}
+    if project_id:
+        filters["project_id"] = project_id
+    filters["sprint_id"] = None
     
     total = await task_crud.count(db, filters=filters)
     

@@ -2,7 +2,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import uuid4
-from typing import List, Optional
 from app.models.tenant import Task, TaskAssignee, TaskComment, TaskDependency, Project, WorkflowState, Workflow, StaffProfile
 from app.schemas.task_schemas import TaskCreate, TaskUpdate, TaskResponse, CommentCreate, CommentUpdate
 from app.services.crud import CRUDService
