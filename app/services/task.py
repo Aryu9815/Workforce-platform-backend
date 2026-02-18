@@ -112,24 +112,39 @@ class TaskService:
         return updated_task
 
 
-    async def delete_project(
+    async def delete_task(
         self,
         db: AsyncSession,
-        project_id: str,
+        task_id: str,
         user_id: str
     ):
         """
         Soft-delete a project (manager only).
         """
-        project = await self.get_project(db, project_id)
+        task = await self.task_crud.get(db, task_id)
+        if not task:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        
+        # delete task assignee records 
+        await self.task_assignee_crud.delete_by_field(
+            db,
+            field="task_id",
+            value=task_id,
+            user_id=user_id
+        )
+        
+        # delete task comment records
+        await self.task_comment_crud.delete_by_field(
+            db,
+            field="task_id",
+            value=task_id,
+            user_id=user_id
+        )
+        
+        # delete task 
+        await self.task_crud.delete(db, id=task_id, user_id=user_id)
 
-        if not await self.team_service.is_manager(db, project_id, user_id):
-            raise Exception(status=403, detail="Only project managers can delete this project")
-
-        project.is_archived = True
-
-        await db.commit()
-        return {"success": True}
+        return task
 
 
     async def get_task(

@@ -71,17 +71,3 @@ class TransitionsRules(TenantBase, TenantScopedMixin):
     rule_type = Column(String(50), nullable=False)
     rule_config = Column(JSONB, nullable=False)
     error_message = Column(String(255), nullable=True)
-
-class Status(TenantBase, TenantScopedMixin):
-    """Status definitions for entities."""
-    __tablename__ = "statuses"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    entity_type = Column(String(50), nullable=False, index=True)
-    color = Column(String(7), nullable=False)
-    icon = Column(String(50), nullable=True)
-    order_index = Column(Integer, default=0)
-    is_default = Column(Boolean, default=False)
-
