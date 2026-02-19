@@ -2,7 +2,8 @@
 Asset management API routes.
 ERP-grade asset tracking with assignment workflow.
 """
-
+from sqlalchemy import select, desc
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -19,6 +20,7 @@ from app.models.tenant import (
     Asset,
     AssetAssignment,
     StaffProfile,
+
 )
 
 from app.api.schemas import (
@@ -218,6 +220,39 @@ async def list_assets(
     )
 
 
+async def generate_asset_tags(
+    db: AsyncSession,
+    asset_type: AssetType,
+    quantity: int
+):
+    prefix = asset_type.name[:3].upper()
+
+    # Get latest asset_tag for this type
+    stmt = (
+        select(Asset.asset_tag)
+        .where(Asset.asset_type_id == asset_type.id)
+        .order_by(desc(Asset.asset_tag))
+        .limit(1)
+    )
+
+    result = await db.execute(stmt)
+    last_asset_tag = result.scalar_one_or_none()
+
+    last_number = 0
+
+    if last_asset_tag:
+        match = re.search(r"(\d+)$", last_asset_tag)
+        if match:
+            last_number = int(match.group(1))
+
+    return [
+        f"{prefix}-{str(last_number + i).zfill(4)}"
+        for i in range(1, quantity + 1)
+    ]
+
+
+
+
 @router.post("", response_model=dict, status_code=201)
 async def create_asset(
     request: Request,
@@ -227,40 +262,54 @@ async def create_asset(
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(401, "Unauthorized")
-    existing = await asset_crud.get_by_fields(
-        db,
-        fields={"asset_tag": data.asset_tag}
-    )
-    if existing:
-        raise HTTPException(409, "Asset tag already exists")
 
     asset_type = await type_crud.get(db, data.asset_type_id)
     if not asset_type:
         raise HTTPException(404, "Asset type not found")
 
-    # ERP Control
-    if asset_type.is_serialized and not data.serial_number:
-        raise HTTPException(400, "Serialized asset requires serial number")
+    quantity = data.quantity or 1
 
-    if not asset_type.is_serialized and data.serial_number:
-        raise HTTPException(400, "Bulk asset must not have serial number")
+    # ERP Rules
     
-    asset = await asset_crud.create(
+    if asset_type.is_serialized:
+        if not data.serial_numbers:
+            raise HTTPException(400, "Serial numbers required")
+
+        if len(data.serial_numbers) != quantity:
+            raise HTTPException(400, "Serial count must match quantity")
+    if not asset_type.is_serialized and data.serial_numbers:
+        raise HTTPException(400, "Bulk asset must not have serial number")
+
+    asset_tags = await generate_asset_tags(
         db,
-        obj_in={
-            **data.model_dump(),
-            "status": "available",
-            "created_by": str(user_id),
-            "updated_by": str(user_id)
-        }
+        asset_type,
+        quantity
     )
+
+    created_assets = []
+
+    for i , tag in enumerate(asset_tags):
+        asset = Asset(
+            asset_type_id=data.asset_type_id,
+            asset_tag=tag,
+            serial_number=data.serial_numbers[i] ,
+            purchase_date=data.purchase_date,
+            purchase_price=data.purchase_price,
+            location=data.location,
+            notes=data.notes,
+            status="available",
+            created_by=str(user_id),
+            updated_by=str(user_id)
+        )
+
+        db.add(asset)
+        created_assets.append(tag)
 
     await db.commit()
 
     return {
-        "id": str(asset.id),
-        "asset_tag": asset.asset_tag,
-        "status": asset.status,
+        "message": f"{quantity} asset(s) created successfully",
+        "asset_tags": created_assets
     }
 
 

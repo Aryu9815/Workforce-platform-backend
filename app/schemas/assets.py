@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional , List
 from pydantic import Field
 from app.api.schemas import BaseSchema, TimestampSchema
 
@@ -52,8 +52,9 @@ class AssetTypeUpdate(BaseSchema):
 
 class AssetCreate(BaseSchema):
     asset_type_id: UUID
-    asset_tag: str = Field(..., min_length=1, max_length=100)
-    serial_number: Optional[str] = Field(None, max_length=150)
+    # asset_tag: str = Field(..., min_length=1, max_length=100)
+    quantity: Optional[int] = 1
+    serial_numbers:  Optional[List[str]] =None
     purchase_date: Optional[date]
     purchase_price: Optional[float] = Field(None, ge=0)
     location: Optional[str] = Field(None, max_length=150)
