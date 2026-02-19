@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
+from app.models.tenant.staff import StaffProfile
 from app.schemas.reimbursement import (ReimbursementClaimCreate,
     ReimbursementClaimUpdate,
     ReimbursementClaimResponse,
@@ -29,6 +30,7 @@ router = APIRouter(prefix="/reimbursements", tags=["Reimbursement Management"])
 claim_crud = CRUDService(ReimbursementClaim)
 item_crud = CRUDService(ReimbursementItem)
 category_crud = CRUDService(ExpenseCategory)
+staff_crud = CRUDService(StaffProfile)
 
 
 def generate_claim_number() -> str:
@@ -90,7 +92,7 @@ async def list_reimbursement_claims(
             )
             for item in items
         ]
-        
+        staff = await staff_crud.get(db, claim.staff_id)
         claim_responses.append(ReimbursementClaimResponse(
             id=claim.id,
             claim_number=claim.claim_number,
@@ -110,7 +112,8 @@ async def list_reimbursement_claims(
             payment_reference=claim.payment_reference,
             created_at=claim.created_at,
             updated_at=claim.updated_at,
-            staff_name=None,  # TODO: Fetch staff name
+            # staff_name=None,  # TODO: Fetch staff name
+            staff_name=staff.first_name + " " + staff.last_name if staff else None,
             items=item_responses
         ))
     

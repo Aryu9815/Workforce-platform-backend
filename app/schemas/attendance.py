@@ -26,7 +26,7 @@ class AttendanceStatus(str, Enum):
     ABSENT = "absent"
     LATE = "late"
     HALF_DAY = "half_day"
-
+    LEAVE = "leave"   # ← ADD THIS
 
 class AttendanceRecordBase(BaseSchema):
     """Base attendance record schema."""
@@ -62,11 +62,11 @@ class AttendanceRecordResponse(AttendanceRecordBase, TimestampSchema):
     check_in: Optional[datetime] = None
     check_out: Optional[datetime] = None
     work_hours: Optional[float] = None
-    overtime_hours: float
-    is_manual_entry: bool
+    overtime_hours: Optional[float] = 0.0
+    is_manual_entry: Optional[bool] = False
     approved_by: Optional[UUID] = None
     staff_name: Optional[str] = None
-
+    staff_name: Optional[str] = None
 
 # ============================================
 # Leave Schemas
