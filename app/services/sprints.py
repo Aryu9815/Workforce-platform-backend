@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tenant import Sprint, Task, WorkflowState, Project
-from app.schemas.sprint_schemas import SprintCreate, SprintResponse, SprintUpdate
+from app.schemas.sprint_schemas import SprintCreate, SprintEnd, SprintResponse, SprintUpdate
 from app.services.crud import CRUDService
 from app.services.task import TaskService 
 
@@ -108,7 +108,8 @@ class SprintService:
         self,
         db: AsyncSession,
         sprint_id: str,
-        user_id: str
+        user_id: str,
+        end_sprint_data: SprintEnd
     ):
         """
         Soft-delete a project (manager only).
@@ -116,6 +117,11 @@ class SprintService:
         sprint = await self.sprint_crud.get(db, sprint_id)
         if not sprint:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sprint not found")
+        open_issues_options = {
+            "backlog": self.move_open_issues_to_backlog,
+            "next_sprint": self.move_open_issues_to_next_sprint,
+            "new_sprint": self.move_open_issues_to_new_sprint
+        }
         project = await self.project_crud.get(db, sprint.project_id)
         tasks = await self.task_crud.get_by_fields(db, fields={"sprint_id": sprint_id})
         final_state_ids = await self.workflow_state_crud.get_by_fields(
@@ -126,14 +132,15 @@ class SprintService:
             }
         )
         final_state_id = final_state_ids[0]
-        for task in tasks:
-            if str(task.workflow_state_id) != str(final_state_id.id):
-                await self.task_crud.update(
-                    db,
-                    db_obj=task,
-                    obj_in={"sprint_id": None},
-                    updated_by=user_id,
-                )
+        move_issues_func = open_issues_options.get(end_sprint_data.move_open_issues_to.value)
+        await move_issues_func(
+            db,
+            user_id,
+            tasks,
+            final_state_id.id,
+            next_sprint_id=end_sprint_data.next_sprint,
+            new_sprint_data=end_sprint_data.new_sprint
+        )
         await self.sprint_crud.update(
             db,
             db_obj=sprint,
@@ -142,4 +149,59 @@ class SprintService:
         )
         return sprint
     
-sprint_service = SprintService()
+    async def move_open_issues_to_backlog(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        tasks: list[Task],
+        final_state_id: str,
+        **kwargs
+    ):
+        for task in tasks:
+            if str(task.workflow_state_id) != str(final_state_id):
+                await self.task_crud.update(
+                    db,
+                    db_obj=task,
+                    obj_in={"sprint_id": None},
+                    updated_by=user_id,
+                )
+        return True
+
+    async def move_open_issues_to_next_sprint(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        tasks: list[Task],
+        final_state_id: str,
+        **kwargs
+    ):
+        next_sprint_id = kwargs.get("next_sprint_id")
+        for task in tasks:
+            if str(task.workflow_state_id) != str(final_state_id):
+                await self.task_crud.update(
+                    db,
+                    db_obj=task,
+                    obj_in={"sprint_id": next_sprint_id},
+                    updated_by=user_id,
+                )
+        return True
+    
+    async def move_open_issues_to_new_sprint(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        tasks: list[Task],
+        final_state_id: str,
+        **kwargs
+    ):
+        new_sprint_data = kwargs.get("new_sprint_data")
+        new_sprint = await self.create_sprint(db, user_id, new_sprint_data)
+        for task in tasks:
+            if str(task.workflow_state_id) != str(final_state_id):
+                await self.task_crud.update(
+                    db,
+                    db_obj=task,
+                    obj_in={"sprint_id": new_sprint.id},
+                    updated_by=user_id,
+                )
+        return new_sprint

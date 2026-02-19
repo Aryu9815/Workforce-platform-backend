@@ -13,6 +13,7 @@ from app.api.schemas import (
 )
 from app.schemas.sprint_schemas import (
     SprintCreate,
+    SprintEnd,
     SprintResponse,
     SprintUpdate
 )
@@ -205,14 +206,15 @@ async def delete_sprint(
     
     return SuccessResponse(message="Task deleted successfully")
 
-@router.put("/{sprint_id}/end", response_model=SprintResponse)
+@router.post("/{sprint_id}/end", response_model=SprintResponse)
 async def end_sprint(
     request: Request,   
     sprint_id: UUID,
+    end_sprint_data: SprintEnd,
     db: AsyncSession = Depends(get_db_session)
 ):  
     user_id = getattr(request.state, 'user_id', None)
-    sprint = await sprint_service.end_sprint(db, sprint_id, user_id)
+    sprint = await sprint_service.end_sprint(db, sprint_id, user_id, end_sprint_data)
     return SprintResponse(
         id=sprint.id,
         project_id=sprint.project_id,

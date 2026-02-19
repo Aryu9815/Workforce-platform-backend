@@ -5,6 +5,11 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from enum import Enum
 
+class IssuseStatus(str, Enum):
+    """Task priority enum."""
+    BACKLOG = "backlog"
+    NEXT_SPRINT = "next_sprint"
+    NEW_SPRINT = "new_sprint"
 
 class BaseSchema(BaseModel):
     """Base schema with common configuration."""
@@ -54,3 +59,10 @@ class SprintResponse(SprintBase, TimestampSchema):
     project_id: UUID
     created_by: UUID
     updated_by: Optional[UUID] = None
+
+class SprintEnd(BaseSchema):
+    """Sprint end schema."""
+    sprint_id: UUID
+    move_open_issues_to: IssuseStatus = IssuseStatus.BACKLOG
+    new_sprint: Optional[SprintCreate] = None
+    next_sprint: Optional[UUID] = None
