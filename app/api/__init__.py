@@ -5,7 +5,6 @@ from app.api.routes import (
     projects_router,
     tasks_router,
     attendance_router,
-    inventory_router,
     reimbursements_router,
 )
 from app.api.schemas import (
@@ -21,7 +20,6 @@ __all__ = [
     "projects_router",
     "tasks_router",
     "attendance_router",
-    "inventory_router",
     "reimbursements_router",
     "SuccessResponse",
     "ErrorResponse",

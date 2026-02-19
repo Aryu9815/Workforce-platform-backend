@@ -8,7 +8,6 @@ from app.models.tenant.project import *
 from app.models.tenant.staff import *
 from app.models.tenant.finance import *
 from app.models.tenant.workflow import *
-from app.models.tenant.inventory import *
 from app.models.tenant.attendance import *
 from app.models.tenant.assets import *
 from app.models.tenant.sprints import *

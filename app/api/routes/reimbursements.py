@@ -6,13 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
-
-from app.api.schemas import (
-    ReimbursementClaimCreate,
+from app.schemas.reimbursement import (ReimbursementClaimCreate,
     ReimbursementClaimUpdate,
     ReimbursementClaimResponse,
     ReimbursementItemCreate,
-    ReimbursementItemResponse,
+    ReimbursementItemResponse,)
+from app.api.schemas import (
+    
     PaginatedResponse,
     PaginationParams,
     SuccessResponse
@@ -46,7 +46,6 @@ async def list_reimbursement_claims(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List reimbursement claims with filtering."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     filters = {}
     if staff_id:
@@ -56,13 +55,12 @@ async def list_reimbursement_claims(
     if project_id:
         filters["project_id"] = project_id
     
-    total = await claim_crud.count(db, tenant_id=tenant_id, filters=filters)
+    total = await claim_crud.count(db, filters=filters)
     
     claims = await claim_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
-        tenant_id=tenant_id,
         filters=filters
     )
     
@@ -71,8 +69,7 @@ async def list_reimbursement_claims(
         # Get items for this claim
         items = await item_crud.get_by_fields(
             db,
-            fields={"claim_id": claim.id},
-            tenant_id=tenant_id
+            fields={"claim_id": claim.id}
         )
         
         item_responses = [
@@ -132,12 +129,12 @@ async def create_reimbursement_claim(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Create a new reimbursement claim."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     # Calculate total from items
     total_amount = sum(
         item.amount for item in claim_data.items
     ) if claim_data.items else claim_data.total_amount
+    current_user_id = getattr(request.state, "user_id", None)
     
     # Create claim
     claim = await claim_crud.create(
@@ -153,9 +150,10 @@ async def create_reimbursement_claim(
             "total_amount": total_amount,
             "currency": claim_data.currency,
             "description": claim_data.description,
-            "status": "draft"
-        },
-        tenant_id=tenant_id
+            "status": "draft",
+            "created_by":str(current_user_id) if current_user_id else None,
+            "updated_by":str(current_user_id) if current_user_id else None   ,
+        }
     )
     
     # Create items
@@ -164,10 +162,11 @@ async def create_reimbursement_claim(
             db,
             obj_in={
                 **item_data.model_dump(),
-                "claim_id": claim.id
-            },
-            tenant_id=tenant_id
-        )
+                "claim_id": claim.id,
+                "created_by":str(current_user_id) if current_user_id else None,
+                "updated_by":str(current_user_id) if current_user_id else None   ,
+
+            }        )
     
     logger.info(f"Reimbursement claim created: {claim.id}")
     
@@ -201,9 +200,8 @@ async def get_reimbursement_claim(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific reimbursement claim by ID."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    claim = await claim_crud.get(db, claim_id, tenant_id=tenant_id)
+    claim = await claim_crud.get(db, claim_id)
     
     if not claim:
         raise HTTPException(
@@ -214,8 +212,7 @@ async def get_reimbursement_claim(
     # Get items
     items = await item_crud.get_by_fields(
         db,
-        fields={"claim_id": claim.id},
-        tenant_id=tenant_id
+        fields={"claim_id": claim.id}
     )
     
     item_responses = [
@@ -267,9 +264,8 @@ async def submit_reimbursement_claim(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Submit a reimbursement claim for approval."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    claim = await claim_crud.get(db, claim_id, tenant_id=tenant_id)
+    claim = await claim_crud.get(db, claim_id)
     
     if not claim:
         raise HTTPException(
@@ -285,19 +281,23 @@ async def submit_reimbursement_claim(
     
     claim.status = "submitted"
     claim.submitted_at = datetime.utcnow()
+    current_user_id = getattr(request.state, "user_id", None)
+    claim.updated_by = str(current_user_id) if current_user_id else None
     await db.flush()
-    
+    await db.commit()
+    await db.refresh(claim)
+
     # Publish event
     await publish_event(
         event_type=EventType.REIMBURSEMENT_SUBMITTED,
         aggregate_type="reimbursement",
         aggregate_id=str(claim.id),
-        tenant_id=tenant_id,
         payload={
             "claim_number": claim.claim_number,
             "staff_id": str(claim.staff_id),
             "total_amount": float(claim.total_amount),
-            "currency": claim.currency
+            "currency": claim.currency,
+            "updated_by":str(current_user_id) if current_user_id else None,
         }
     )
     
@@ -334,10 +334,9 @@ async def approve_reimbursement_claim(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Approve or reject a reimbursement claim."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
     
-    claim = await claim_crud.get(db, claim_id, tenant_id=tenant_id)
+    claim = await claim_crud.get(db, claim_id)
     
     if not claim:
         raise HTTPException(
@@ -355,8 +354,12 @@ async def approve_reimbursement_claim(
     claim.approved_by = user_id
     claim.approved_at = datetime.utcnow()
     claim.approval_notes = approval_data.approval_notes
-    
+    current_user_id = getattr(request.state, "user_id", None)
+    claim.updated_by = str(current_user_id) if current_user_id else None
     await db.flush()
+    await db.commit()
+    await db.refresh(claim)
+    
     
     # Publish event
     if approval_data.status == "approved":
@@ -364,12 +367,13 @@ async def approve_reimbursement_claim(
             event_type=EventType.REIMBURSEMENT_APPROVED,
             aggregate_type="reimbursement",
             aggregate_id=str(claim.id),
-            tenant_id=tenant_id,
             payload={
                 "claim_number": claim.claim_number,
                 "staff_id": str(claim.staff_id),
                 "approved_by": user_id,
-                "amount": float(claim.total_amount)
+                "amount": float(claim.total_amount),
+            "updated_by":str(current_user_id) if current_user_id else None,
+
             }
         )
     
@@ -406,9 +410,8 @@ async def mark_reimbursement_paid(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Mark a reimbursement claim as paid."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    claim = await claim_crud.get(db, claim_id, tenant_id=tenant_id)
+    claim = await claim_crud.get(db, claim_id)
     
     if not claim:
         raise HTTPException(
@@ -425,20 +428,25 @@ async def mark_reimbursement_paid(
     claim.status = "paid"
     claim.paid_at = datetime.utcnow()
     claim.payment_reference = payment_reference
-    
+    current_user_id = getattr(request.state, "user_id", None)
+    claim.updated_by = str(current_user_id) if current_user_id else None
     await db.flush()
+    await db.commit()
+    await db.refresh(claim)
+    
     
     # Publish event
     await publish_event(
         event_type=EventType.REIMBURSEMENT_PAID,
         aggregate_type="reimbursement",
         aggregate_id=str(claim.id),
-        tenant_id=tenant_id,
         payload={
             "claim_number": claim.claim_number,
             "staff_id": str(claim.staff_id),
             "amount": float(claim.total_amount),
-            "payment_reference": payment_reference
+            "payment_reference": payment_reference,
+            "updated_by":str(current_user_id) if current_user_id else None,
+
         }
     )
     
@@ -477,11 +485,9 @@ async def list_expense_categories(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List all expense categories."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
     categories = await category_crud.get_multi(
         db,
-        tenant_id=tenant_id,
         filters={"is_active": True}
     )
     

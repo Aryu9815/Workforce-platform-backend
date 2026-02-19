@@ -41,7 +41,7 @@ class ReimbursementClaim(TenantBase, TenantScopedMixin):
     expense_date_start = Column(Date, nullable=True)
     expense_date_end = Column(Date, nullable=True)
     total_amount = Column(Numeric(12, 2), nullable=False)
-    currency = Column(String(3), default="USD")
+    currency = Column(String(3), default="INR")
     exchange_rate = Column(Numeric(10, 6), default=1)
     description = Column(Text, nullable=True)
     status = Column(String(20), default="draft")
