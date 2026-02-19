@@ -72,6 +72,7 @@ class TaskResponse(TaskBase, TimestampSchema):
     """Task response schema."""
     id: UUID
     project_id: UUID
+    sprint_id: Optional[UUID] = None
     parent_task_id: Optional[UUID] = None
     workflow_state_id: Optional[UUID] = None
     workflow_state_name: Optional[str] = None

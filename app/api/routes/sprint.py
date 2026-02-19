@@ -180,7 +180,7 @@ async def update_sprint(
 
 
 @router.delete("/{sprint_id}", response_model=SuccessResponse)
-async def delete_task(
+async def delete_sprint(
     request: Request,
     sprint_id: UUID,
     db: AsyncSession = Depends(get_db_session)
@@ -204,3 +204,25 @@ async def delete_task(
     logger.info(f"Task deleted: {sprint_id}")
     
     return SuccessResponse(message="Task deleted successfully")
+
+@router.put("/{sprint_id}/end", response_model=SprintResponse)
+async def end_sprint(
+    request: Request,   
+    sprint_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):  
+    user_id = getattr(request.state, 'user_id', None)
+    sprint = await sprint_service.end_sprint(db, sprint_id, user_id)
+    return SprintResponse(
+        id=sprint.id,
+        project_id=sprint.project_id,
+        name=sprint.name,
+        goal=sprint.goal,
+        status=sprint.status,
+        start_date=sprint.start_date,
+        end_date=sprint.end_date,
+        created_at=sprint.created_at,
+        updated_at=sprint.updated_at,
+        created_by=sprint.created_by,
+        updated_by=sprint.updated_by
+    )

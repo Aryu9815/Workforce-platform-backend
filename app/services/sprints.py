@@ -1,7 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-from app.models.tenant import Sprint, Task
+from app.models.tenant import Sprint, Task, WorkflowState, Project
 from app.schemas.sprint_schemas import SprintCreate, SprintResponse, SprintUpdate
 from app.services.crud import CRUDService
 from app.services.task import TaskService 
@@ -12,6 +11,8 @@ class SprintService:
         self.sprint_crud = CRUDService(Sprint)
         self.task_crud = CRUDService(Task)
         self.task_service = TaskService()
+        self.workflow_state_crud = CRUDService(WorkflowState)
+        self.project_crud = CRUDService(Project)
 
 
     async def create_sprint(
@@ -102,3 +103,43 @@ class SprintService:
             created_by=sprint.created_by,
             updated_by=sprint.updated_by
         )
+    
+    async def end_sprint(
+        self,
+        db: AsyncSession,
+        sprint_id: str,
+        user_id: str
+    ):
+        """
+        Soft-delete a project (manager only).
+        """
+        sprint = await self.sprint_crud.get(db, sprint_id)
+        if not sprint:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sprint not found")
+        project = await self.project_crud.get(db, sprint.project_id)
+        tasks = await self.task_crud.get_by_fields(db, fields={"sprint_id": sprint_id})
+        final_state_ids = await self.workflow_state_crud.get_by_fields(
+            db, 
+            fields={
+                "is_final": True,
+                "workflow_id": project.workflow_id
+            }
+        )
+        final_state_id = final_state_ids[0]
+        for task in tasks:
+            if str(task.workflow_state_id) != str(final_state_id.id):
+                await self.task_crud.update(
+                    db,
+                    db_obj=task,
+                    obj_in={"sprint_id": None},
+                    updated_by=user_id,
+                )
+        await self.sprint_crud.update(
+            db,
+            db_obj=sprint,
+            obj_in={"status": "completed"},
+            updated_by=user_id,
+        )
+        return sprint
+    
+sprint_service = SprintService()

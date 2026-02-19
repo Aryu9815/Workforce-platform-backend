@@ -110,7 +110,7 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         # Apply additional filters
         if filters:
             for key, value in filters.items():
-                if hasattr(self.model, key) and value is not None:
+                if hasattr(self.model, key):
                     query = query.where(getattr(self.model, key) == value)
         
         # Apply ordering
