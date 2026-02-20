@@ -20,7 +20,6 @@ from app.models.tenant import (
     Asset,
     AssetAssignment,
     StaffProfile,
-
 )
 
 from app.api.schemas import (
@@ -38,7 +37,7 @@ from app.schemas.assets import (
     AssetAssignRequest,
     AssetReturnRequest
 )
-
+from app.utils.rbac_middleware import require_permissions
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/assets", tags=["Asset Management"])
@@ -54,6 +53,7 @@ staff_crud = CRUDService(StaffProfile)
 # ============================================================
 
 @router.get("/categories", response_model=List[dict])
+@require_permissions(["asset:view"])
 async def list_asset_categories(
     request: Request,
     db: AsyncSession = Depends(get_db_session)
@@ -72,6 +72,7 @@ async def list_asset_categories(
 
 
 @router.post("/categories", response_model=dict, status_code=201)
+@require_permissions(["asset:create"])
 async def create_asset_category(
     request: Request,
     data: AssetCategoryCreate,
@@ -116,6 +117,7 @@ async def create_asset_category(
 # ============================================================
 
 @router.get("/types", response_model=List[dict])
+@require_permissions(["asset:view"])
 async def list_asset_types(
     request: Request,
     category_id: Optional[UUID] = None,
@@ -141,6 +143,7 @@ async def list_asset_types(
 
 
 @router.post("/types", response_model=dict, status_code=201)
+@require_permissions(["asset:create"])
 async def create_asset_type(
     request: Request,
     data: AssetTypeCreate,
@@ -176,6 +179,7 @@ async def create_asset_type(
 # ============================================================
 
 @router.get("", response_model=PaginatedResponse)
+@require_permissions(["asset:view"])
 async def list_assets(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -254,6 +258,7 @@ async def generate_asset_tags(
 
 
 @router.post("", response_model=dict, status_code=201)
+@require_permissions(["asset:create"])
 async def create_asset(
     request: Request,
     data: AssetCreate,
@@ -319,6 +324,7 @@ async def create_asset(
 # ============================================================
 
 @router.post("/{asset_id}/assign", response_model=SuccessResponse)
+@require_permissions(["asset:create"])
 async def assign_asset(
     request: Request,
     asset_id: UUID,
@@ -375,6 +381,7 @@ async def assign_asset(
 
 
 @router.post("/{asset_id}/return", response_model=SuccessResponse)
+@require_permissions(["asset:create"])
 async def return_asset(
     request: Request,
     asset_id: UUID,

@@ -22,6 +22,7 @@ class TokenResponse(BaseSchema):
     expires_in: Optional[int] = None
     tenant: Optional[Dict[str, Any]] = None
     multiple_tenants_found: bool = False
+    permissions: List[str] = []
 
 
 class LoginRequest(BaseSchema):
