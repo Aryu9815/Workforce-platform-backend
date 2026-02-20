@@ -46,6 +46,7 @@ from app.services.auth import auth_service
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
 from app.services.staff import StaffService
+from app.utils.rbac_middleware import require_permissions
 logger = get_logger(__name__)
 router = APIRouter(prefix="/staff", tags=["Staff Management"])
 
@@ -60,6 +61,8 @@ def get_department( db: AsyncSession, department_id: UUID):
 def get_designation(db: AsyncSession, designation_id: UUID):
     return designation_crud.get(db, designation_id)
 @router.get("", response_model=PaginatedResponse)
+@require_permissions(["staff:view"])
+
 async def list_staff(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -139,6 +142,8 @@ def require_auth_context(request: Request):
     response_model=StaffResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@require_permissions(["attendance:create"])
+
 async def create_staff(
     request: Request,
     staff_data: StaffCreate,
@@ -307,6 +312,7 @@ async def create_staff(
 # ============================================
 
 @router.get("/departments", response_model=List[DepartmentResponse])
+@require_permissions(["staff:view"])
 async def list_departments(
     request: Request,
     db: AsyncSession = Depends(get_db_session)
@@ -337,6 +343,7 @@ async def list_departments(
 
 
 @router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["staff:create"])
 async def create_department(
     request: Request,
     dept_data: DepartmentCreate,
@@ -373,6 +380,7 @@ async def create_department(
 # ============================================
 
 @router.get("/designations", response_model=List[DesignationResponse])
+@require_permissions(["staff:view"])
 async def list_designations(
     request: Request,
     db: AsyncSession = Depends(get_db_session)
@@ -403,6 +411,7 @@ async def list_designations(
     response_model=DesignationResponse,
     status_code=status.HTTP_201_CREATED
 )
+@require_permissions(["staff:create"])
 async def create_designation(
     request: Request,
     designation_data: DesignationCreate,
@@ -436,6 +445,7 @@ async def create_designation(
     )
 
 @router.put("/designations/{designation_id}", response_model=DesignationResponse)
+@require_permissions(["staff:update"])
 async def update_designation(
     request: Request,
     designation_id: UUID,
@@ -476,6 +486,7 @@ async def update_designation(
 
 
 @router.put("/departments/{department_id}", response_model=DepartmentResponse)
+@require_permissions(["staff:update"])
 async def update_department(
     request: Request,
     department_id: UUID,
@@ -519,6 +530,7 @@ async def update_department(
     )
 
 @router.get("/{staff_id:uuid}", response_model=StaffResponse)
+@require_permissions(["staff:view"])
 async def get_staff(
     request: Request,
     staff_id: UUID,
@@ -563,6 +575,7 @@ async def get_staff(
 
 
 @router.put("/{staff_id:uuid}", response_model=StaffResponse)
+@require_permissions(["staff:update"])
 async def update_staff(
     request: Request,
     staff_id: UUID,
@@ -629,6 +642,7 @@ async def update_staff(
 
 
 @router.delete("/{staff_id:uuid}", response_model=SuccessResponse)
+@require_permissions(["staff:delete"])
 async def delete_staff(
     request: Request,
     staff_id: UUID,
