@@ -31,7 +31,8 @@ from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
 from app.services.leave import LeaveService
-
+# from app.utils.rbac_middleware import require_permissions
+from app.utils.rbac_middleware import require_permissions
 logger = get_logger(__name__)
 router = APIRouter(prefix="/attendance", tags=["Attendance Management"])
 
@@ -42,7 +43,9 @@ staff_crud = CRUDService(StaffProfile)  # Assuming staff_profiles is the table n
 attendance_service = AttendanceService()
 leave_service = LeaveService()
 leave_type_crud = CRUDService(LeaveType)
+
 @router.get("/records", response_model=PaginatedResponse)
+@require_permissions(["attendance:view"])
 async def list_attendance(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -99,6 +102,8 @@ async def list_attendance(
 
 
 @router.post("/check-in", response_model=AttendanceRecordResponse)
+@require_permissions(["attendance:mark"])
+
 async def check_in(
     request: Request,
     staff_id: UUID,
@@ -137,6 +142,8 @@ async def check_in(
 
 
 @router.post("/check-out", response_model=AttendanceRecordResponse)
+@require_permissions(["attendance:mark"])
+
 async def check_out(
     request: Request,
     staff_id: UUID,
@@ -179,6 +186,8 @@ async def check_out(
 # ============================================
 
 @router.get("/leave-requests", response_model=PaginatedResponse)
+@require_permissions(["attendance:view"])
+
 async def list_leave_requests(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -235,6 +244,8 @@ async def list_leave_requests(
 
 
 @router.post("/leave-requests", response_model=LeaveRequestResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["attendance:mark"])
+
 async def create_leave_request(
     request: Request,
     leave_data: LeaveRequestCreate,
@@ -265,6 +276,8 @@ async def create_leave_request(
 
 
 @router.put("/leave-requests/{leave_id}/approve", response_model=LeaveRequestResponse)
+@require_permissions(["attendance:mark"])
+
 async def approve_leave(
     request: Request,
     leave_id: UUID,
@@ -274,42 +287,7 @@ async def approve_leave(
     """Approve or reject a leave request."""
     user_id = getattr(request.state, 'user_id', None)
     
-    # leave = await leave_crud.get(db, leave_id)
-    
-    # if not leave:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail="Leave request not found"
-    #     )
-    
-    # if leave.status != "pending":
-    #     raise HTTPException(
-    #         status_code=status.HTTP_409_CONFLICT,
-    #         detail=f"Leave request already {leave.status}"
-    #     )
-    # staff_profile = await staff_crud.get_by_user_id(db, user_id)
-    # staff_id = staff_profile.id if staff_profile else None
-    # # Update leave
-    # leave.status = approval_data.status
-    # leave.approved_by = staff_id
-    # leave.approved_at = datetime.now(timezone.utc)
-    # leave.approval_notes = approval_data.approval_notes
-    # await db.commit()
-    # # await db.flush()
-    # await db.refresh(leave)
-    # # Publish event
-    # if approval_data.status == "approved":
-    #     await publish_event(
-    #         event_type=EventType.LEAVE_APPROVED,
-    #         aggregate_type="leave",
-    #         aggregate_id=str(leave.id),
-    #         payload={
-    #             "staff_id": str(leave.staff_id),
-    #             "approved_by": user_id,
-    #             "start_date": leave.start_date.isoformat(),
-    #             "end_date": leave.end_date.isoformat()
-    #         }
-    #     )
+
     leave = await leave_service.approve_leave(
         db=db,
         leave_id=leave_id,
@@ -338,6 +316,8 @@ async def approve_leave(
 
 
 @router.get("/leave-types", response_model=List[dict])
+@require_permissions(["attendance:view"])
+
 async def list_leave_types(
     request: Request,
     db: AsyncSession = Depends(get_db_session)
