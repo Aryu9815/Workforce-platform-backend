@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
-
 from app.api.schemas import (
     PaginatedResponse,
     PaginationParams,
@@ -25,6 +24,7 @@ from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
 from app.services.projects import ProjectService
 from app.services.team import TeamService
+from app.utils.rbac_middleware import require_permissions
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/projects", tags=["Project Management"])
@@ -33,10 +33,8 @@ project_crud = CRUDService(Project)
 project_service = ProjectService()
 team_service = TeamService()
 
-
-
-
 @router.get("", response_model=PaginatedResponse)
+@require_permissions(["project:view"])
 async def list_projects(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -100,6 +98,7 @@ async def list_projects(
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["project:create"])
 async def create_project(
     request: Request,
     project_data: ProjectCreate,
@@ -157,6 +156,7 @@ async def create_project(
 
 
 @router.post("/member", response_model=ProjectMemberResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["project:manage-members"])
 async def add_project_member(
     request: Request,
     project_data: CreateProjectMember,
@@ -186,6 +186,7 @@ async def add_project_member(
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
+@require_permissions(["project:view"])
 async def get_project(
     request: Request,
     project_id: UUID,
@@ -196,6 +197,7 @@ async def get_project(
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
+@require_permissions(["project:update"])
 async def update_project(
     request: Request,
     project_id: UUID,
@@ -249,6 +251,7 @@ async def update_project(
 
 
 @router.delete("/{project_id}", response_model=SuccessResponse)
+@require_permissions(["project:delete"])
 async def delete_project(
     request: Request,
     project_id: UUID,
@@ -273,6 +276,7 @@ async def delete_project(
     return SuccessResponse(message="Project deleted successfully")
 
 @router.get("/{project_id}/members")
+@require_permissions(["project:view"])
 async def get_project_members(
     request: Request,
     project_id: UUID,
@@ -285,6 +289,7 @@ async def get_project_members(
     return members
 
 @router.delete("/member/{member_id}")
+@require_permissions(["project:manage-members"])
 async def remove_project_member(
     request: Request,
     member_id: UUID,
@@ -296,6 +301,7 @@ async def remove_project_member(
     return SuccessResponse(message="Member removed successfully")
 
 @router.put("/member/{member_id}", response_model=ProjectMemberResponse)
+@require_permissions(["project:manage-members"])
 async def remove_project_member(
     request: Request,
     member_id: UUID,

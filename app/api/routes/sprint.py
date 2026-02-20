@@ -23,7 +23,7 @@ from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
 from app.services.sprints import SprintService
-
+from app.utils.rbac_middleware import require_permissions
 logger = get_logger(__name__)
 router = APIRouter(prefix="/sprints", tags=["Sprint Management"])
 
@@ -32,6 +32,7 @@ sprint_service = SprintService()
 
 
 @router.get("", response_model=PaginatedResponse)
+@require_permissions(["sprint:view"])
 async def list_sprints(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -80,6 +81,7 @@ async def list_sprints(
 
 
 @router.post("", response_model=SprintResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["sprint:create"])
 async def create_sprint(
     request: Request,
     sprint_data: SprintCreate,
@@ -125,6 +127,7 @@ async def create_sprint(
 
 
 @router.get("/{sprint_id}", response_model=SprintResponse)
+@require_permissions(["task:view"])
 async def get_task(
     request: Request,
     sprint_id: UUID,
@@ -135,6 +138,7 @@ async def get_task(
     return await sprint_service.get_sprint(db, sprint_id)
 
 @router.put("/{sprint_id}", response_model=SprintResponse)
+@require_permissions(["sprint:update"])
 async def update_sprint(
     request: Request,
     sprint_id: UUID,
@@ -181,6 +185,7 @@ async def update_sprint(
 
 
 @router.delete("/{sprint_id}", response_model=SuccessResponse)
+@require_permissions(["sprint:delete"])
 async def delete_sprint(
     request: Request,
     sprint_id: UUID,
@@ -207,6 +212,7 @@ async def delete_sprint(
     return SuccessResponse(message="Task deleted successfully")
 
 @router.post("/{sprint_id}/end", response_model=SprintResponse)
+@require_permissions(["sprint:complete"])
 async def end_sprint(
     request: Request,   
     sprint_id: UUID,

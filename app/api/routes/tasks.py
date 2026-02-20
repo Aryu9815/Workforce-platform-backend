@@ -25,7 +25,7 @@ from app.services.crud import CRUDService
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
 from app.services.task import TaskService
-
+from app.utils.rbac_middleware import require_permissions
 logger = get_logger(__name__)
 router = APIRouter(prefix="/tasks", tags=["Task Management"])
 
@@ -36,6 +36,7 @@ task_service = TaskService()
 
 
 @router.get("", response_model=PaginatedResponse)
+@require_permissions(["task:view"])
 async def list_tasks(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -103,6 +104,7 @@ async def list_tasks(
 
 
 @router.get("/{proejct_id}/backlogs", response_model=PaginatedResponse)
+@require_permissions(["task:view"])
 async def list_backlog_tasks(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -163,6 +165,7 @@ async def list_backlog_tasks(
 
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["task:create"])
 async def create_task(
     request: Request,
     task_data: TaskCreate,
@@ -218,6 +221,7 @@ async def create_task(
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
+@require_permissions(["task:view"])
 async def get_task(
     request: Request,
     task_id: UUID,
@@ -229,6 +233,7 @@ async def get_task(
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
+@require_permissions(["task:update"])
 async def update_task(
     request: Request,
     task_id: UUID,
@@ -285,6 +290,7 @@ async def update_task(
 
 
 @router.delete("/{task_id}", response_model=SuccessResponse)
+@require_permissions(["task:delete"])
 async def delete_task(
     request: Request,
     task_id: UUID,
@@ -312,6 +318,7 @@ async def delete_task(
 
 
 @router.post("/{task_id}/comments", response_model=CommentResponse)
+@require_permissions(["task:comment"])
 async def add_comment(
     request: Request,
     comment_data: CommentCreate,
@@ -342,6 +349,7 @@ async def add_comment(
 
 
 @router.get("/{task_id}/comments", response_model=List[CommentResponse])
+@require_permissions(["task:view"])
 async def get_comments(
     request: Request,
     task_id: UUID,
@@ -351,6 +359,7 @@ async def get_comments(
     return await task_service.get_comments(db, task_id)
 
 @router.delete("/{task_id}/comments/{comment_id}", response_model=SuccessResponse)
+@require_permissions(["task:comment"])
 async def delete_comment(
     request: Request,
     comment_id: UUID,
@@ -365,6 +374,7 @@ async def delete_comment(
 
 
 @router.put("/{task_id}/comments/{comment_id}", response_model=CommentResponse)
+@require_permissions(["task:comment"])
 async def update_comment(
     request: Request,
     comment_id: UUID,
