@@ -1,14 +1,15 @@
 """
 Authentication service for user management and JWT handling.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from uuid import UUID
 import logging
 from app.models.common import User, TenantMaster, RefreshToken
-from app.models.tenant import TenantUserRole, RolePermission, Permission
+from app.models.tenant import TenantUserRole, RolePermission, Permission, TenantUser
 from app.core.security import (
     hash_password,
     verify_password,
@@ -20,6 +21,7 @@ from app.core.config import settings
 from app.models.tenant.staff import StaffProfile
 from app.services.crud import CRUDService
 from app.utils.validators import validate_email, validate_password_strength, validate_phone
+from app.db.tenant_connection import get_tenant_session
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,8 @@ class AuthService:
     def __init__(self):
         self.user_crud = CRUDService(User)
         self.tenant_crud = CRUDService(TenantMaster)
-    
+        self.tenant_user_crud = CRUDService(TenantUser)
+
     async def authenticate_user(
         self,
         db: AsyncSession,
@@ -124,22 +127,32 @@ class AuthService:
         db: AsyncSession,
         user: User,
         tenant_id: Optional[str] = None,
-        user_agent: Optional[str] = None
+        user_agent: Optional[str] = None,
+        is_tenant_login: bool = False
     ) -> Tuple[str, str]:
         """Create access and refresh tokens for a user."""
-        # Get user permissions
-        # permissions = await self.get_user_permissions(db, user.id, tenant_id)
-        
+        permissions = []
+        if is_tenant_login and tenant_id:
+            sessionmaker = await get_tenant_session(db, tenant_id)
+            async with sessionmaker() as tenant_db:
+                # Get user permissions
+                tenant_user = await self.get_tenant_user(tenant_db, user.id)
+                if not tenant_user:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not belong to the specified tenant")
+                permissions = await self.get_user_permissions(tenant_db, tenant_user.id, tenant_id)
+
         # Create tokens
         access_token = create_access_token(
-            user_id=str(user.id),
+            user_id=str(tenant_user.id) if is_tenant_login and tenant_id else str(user.id),
+            common_id=str(user.id),
             email=user.email,
             tenant_id=tenant_id,
-            # permissions=permissions
+            permissions=permissions
         )
         
         refresh_token_str = create_refresh_token(
-            user_id=str(user.id),
+            user_id=str(tenant_user.id) if is_tenant_login and tenant_id else str(user.id),
+            common_id=str(user.id),
             tenant_id=tenant_id
         )
         
@@ -149,8 +162,8 @@ class AuthService:
             tenant_id=tenant_id,
             token=access_token,  # Store partial for reference
             refresh_token=refresh_token_str,
-            token_expires_at=datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
-            refresh_expires_at=datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
+            token_expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
+            refresh_expires_at=datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
             user_agent=user_agent
         )
         
@@ -158,7 +171,7 @@ class AuthService:
         await db.flush()
         
         logger.info(f"Tokens created for user {user.id}")
-        return access_token, refresh_token_str
+        return access_token, refresh_token_str, permissions
     
     async def refresh_access_token(
         self,
@@ -188,20 +201,21 @@ class AuthService:
             return None
         
         # Get user
-        user = await self.user_crud.get(db, db_token.user_id)
-        if not user or user.status != "active":
+        user = await self.tenant_user_crud.get(db, db_token.user_id)
+        if not user:
             logger.warning("Token refresh failed: User not found or inactive")
             return None
         
         # Revoke old refresh token
-        db_token.revoked_at = datetime.utcnow()
+        db_token.revoked_at = datetime.now(timezone.utc)
         
         # Create new tokens
-        access_token, new_refresh_token = await self.create_tokens(
+        access_token, new_refresh_token, _ = await self.create_tokens(
             db,
             user,
             tenant_id=str(db_token.tenant_id) if db_token.tenant_id else None,
-            user_agent=db_token.user_agent
+            user_agent=db_token.user_agent,
+            is_tenant_login=True if db_token.tenant_id else False
         )
         
         logger.info(f"Tokens refreshed for user {user.id}")
@@ -220,7 +234,7 @@ class AuthService:
         if not db_token:
             return False
         
-        db_token.revoked_at = datetime.utcnow()
+        db_token.revoked_at = datetime.now(timezone.utc)
         await db.flush()
         
         logger.info(f"Refresh token revoked for user {db_token.user_id}")
@@ -243,7 +257,7 @@ class AuthService:
         
         count = 0
         for token in tokens:
-            token.revoked_at = datetime.utcnow()
+            token.revoked_at = datetime.now(timezone.utc)
             count += 1
         
         await db.flush()
@@ -264,7 +278,8 @@ class AuthService:
         query = select(TenantUserRole).where(
             and_(
                 TenantUserRole.user_id == user_id,
-                TenantUserRole.tenant_id == tenant_id
+                TenantUserRole.is_active == True,
+                TenantUserRole.is_deleted == False
             )
         )
         result = await db.execute(query)
@@ -362,7 +377,18 @@ class AuthService:
             })
         return tenants
 
-        
+    async def get_tenant_user(
+        self,
+        db: AsyncSession,
+        user_id: str
+    ):
+        result = await db.execute(select(TenantUser).where(TenantUser.user_id == user_id))
+        tenant_user = result.scalar_one_or_none()
+        if not tenant_user:
+            return None
+        return tenant_user
+
+
 # Global auth service instance
 auth_service = AuthService()
 staff_crud  = CRUDService(StaffProfile)

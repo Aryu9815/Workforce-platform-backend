@@ -17,6 +17,7 @@ pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 class TokenData(BaseModel):
     """Token payload data."""
     user_id: Optional[str] = None
+    common_id: Optional[str] = None
     tenant_id: Optional[str] = None
     email: Optional[str] = None
     permissions: List[str] = []
@@ -43,6 +44,7 @@ class SecurityUtils:
     
     @staticmethod
     def create_access_token(
+        common_id: str,
         user_id: str,
         email: str,
         tenant_id: Optional[str] = None,
@@ -57,6 +59,7 @@ class SecurityUtils:
 
         to_encode = {
             "sub": str(user_id),
+            "common_id": str(common_id),
             "email": email,
             "tenant_id": str(tenant_id) if tenant_id else None,
             "permissions": permissions or [],
@@ -75,6 +78,7 @@ class SecurityUtils:
     
     @staticmethod
     def create_refresh_token(
+        common_id: str,
         user_id: str,
         tenant_id: Optional[str] = None,
         expires_delta: Optional[timedelta] = None
@@ -87,6 +91,7 @@ class SecurityUtils:
         
         to_encode = {
             "sub": str(user_id),
+            "common_id": str(common_id),
             "tenant_id": str(tenant_id) if tenant_id else None,
             "type": "refresh",
             "exp":  int(expire.timestamp()),
@@ -133,6 +138,7 @@ class SecurityUtils:
         
         return TokenData(
             user_id=payload.get("sub"),
+            common_id=payload.get("common_id"),
             tenant_id=payload.get("tenant_id"),
             email=payload.get("email"),
             permissions=payload.get("permissions", []),

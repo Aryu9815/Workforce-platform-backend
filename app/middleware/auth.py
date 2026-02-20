@@ -74,6 +74,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Set user and tenant in request state
         request.state.user_id = token_data.user_id
+        request.state.common_id = token_data.common_id
         request.state.user_email = token_data.email
         request.state.tenant_id = token_data.tenant_id
         request.state.permissions = token_data.permissions

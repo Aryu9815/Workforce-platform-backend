@@ -61,7 +61,7 @@ async def login(
     user_agent = request.headers.get("User-Agent")
     
     # Create tokens
-    access_token, refresh_token = await auth_service.create_tokens(
+    access_token, refresh_token, _ = await auth_service.create_tokens(
         db,
         user,
         tenant_id=tenant['id'],
@@ -209,7 +209,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get current authenticated user details."""
-    user_id = getattr(request.state, 'user_id', None)
+    user_id = getattr(request.state, 'common_id', None)
     
     if not user_id:
         raise HTTPException(
@@ -270,8 +270,8 @@ async def switch_tenant(
     db: AsyncSession = Depends(get_common_db)
 ):
     """Switch to a different tenant and get new tokens."""
-    user_id = getattr(request.state, 'user_id', None)
-    
+    user_id = getattr(request.state, 'common_id', None)
+    print("common_id in switch tenant:", user_id)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -302,20 +302,22 @@ async def switch_tenant(
     
     # Create new tokens for the selected tenant
     user_agent = request.headers.get("User-Agent")
-    access_token, refresh_token = await auth_service.create_tokens(
+    access_token, refresh_token, permissions = await auth_service.create_tokens(
         db,
         user,
         tenant_id=tenant_id,
-        user_agent=user_agent
+        user_agent=user_agent,
+        is_tenant_login=True
     )
     
     logger.info(f"User {user_id} switched to tenant {tenant_id}")
-    
+    print("permissions in switch tenant:", permissions)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         tenant=tenant,
-        multiple_tenants_found=True
+        multiple_tenants_found=True,
+        permissions=permissions
     )
