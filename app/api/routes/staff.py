@@ -142,7 +142,7 @@ def require_auth_context(request: Request):
     response_model=StaffResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@require_permissions(["attendance:create"])
+@require_permissions(["staff:create"])
 
 async def create_staff(
     request: Request,
