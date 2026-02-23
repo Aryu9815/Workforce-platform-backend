@@ -245,7 +245,6 @@ async def list_leave_requests(
 
 @router.post("/leave-requests", response_model=LeaveRequestResponse, status_code=status.HTTP_201_CREATED)
 @require_permissions(["attendance:mark"])
-
 async def create_leave_request(
     request: Request,
     leave_data: LeaveRequestCreate,
@@ -275,6 +274,61 @@ async def create_leave_request(
     )
 
 
+
+
+# @router.post("/leave/test-run-accrual")
+# async def test_run_accrual(
+#     year: int,
+#     month: int,
+#     db: AsyncSession = Depends(get_db_session),
+# ):
+#     """
+#     TEST ONLY:
+#     Manually trigger monthly leave accrual.
+#     Use from Swagger for testing.
+#     """
+
+#     leave_service = LeaveService()
+
+#     await leave_service.accrue_monthly_leaves(
+#         db=db,
+#         year=year,
+#         month=month,
+#     )
+
+#     return {
+#         "success": True,
+#         "message": f"Accrual executed for {year}-{month}"
+#     }
+@router.post("/leave-type", response_model=LeaveRequestResponse, status_code=status.HTTP_201_CREATED)
+# @require_permissions(["attendance:mark"])
+async def create_leave_type(
+    request: Request,
+    leave_data: LeaveRequestCreate,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Create a new leave request."""
+    current_user_id = getattr(request.state, 'user_id', None) 
+
+    leave = await leave_service.create_leave(db, leave_data, current_user_id)
+    logger.info(f"Leave request created: {leave.id}")
+    
+    return LeaveRequestResponse(
+        id=leave.id,
+        staff_id=leave.staff_id,
+        leave_type_id=leave.leave_type_id,
+        start_date=leave.start_date,
+        end_date=leave.end_date,
+        days_requested=leave.days_requested,
+        reason=leave.reason,
+        status=leave.status,
+        approved_by=leave.approved_by,
+        approved_at=leave.approved_at,
+        approval_notes=leave.approval_notes,
+        documents=leave.documents or [],
+        created_at=leave.created_at,
+        updated_at=leave.updated_at
+    )
 @router.put("/leave-requests/{leave_id}/approve", response_model=LeaveRequestResponse)
 @require_permissions(["attendance:mark"])
 

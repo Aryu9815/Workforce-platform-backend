@@ -56,7 +56,7 @@ class EventType(str, Enum):
     ATTENDANCE_CHECK_OUT = "attendance.check_out"
     LEAVE_REQUESTED = "leave.requested"
     LEAVE_APPROVED = "leave.approved"
-    
+    LEAVE_TYPE_CREATED="leavetype.requested"
     # Reimbursement events
     REIMBURSEMENT_SUBMITTED = "reimbursement.submitted"
     REIMBURSEMENT_APPROVED = "reimbursement.approved"

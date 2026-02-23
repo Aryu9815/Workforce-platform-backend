@@ -110,4 +110,19 @@ class LeaveRequestResponse(LeaveRequestBase, TimestampSchema):
     documents: List[Dict[str, Any]]
     staff_name: Optional[str] = None
     leave_type_name: Optional[str] = None
-
+class LeaveTypeRequestCreate:
+    name :str
+    code : str
+    description :str
+    is_paid :Optional[bool]=False
+    # color = Column(String(7), nullable=True)
+    # requires_approval = Column(Boolean, default=True)
+    # max_days_per_year = Column(Integer, nullable=True)
+    # carry_forward = Column(Boolean, default=False)
+    # this is for leave type  creation  mid month or year for existing staff 
+#     await leave_init_service.initialize_leave_type_for_existing_staff(
+#     db=db,
+#     leave_type_id=leave_type.id,
+#     year=datetime.utcnow().year,
+#     created_by=str(current_user_id),
+# )

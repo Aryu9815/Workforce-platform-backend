@@ -45,6 +45,7 @@ from app.services.crud import CRUDService
 from app.services.auth import auth_service
 from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
+from app.services.leave_initialization_service import LeaveInitializationService
 from app.services.staff import StaffService
 from app.utils.rbac_middleware import require_permissions
 logger = get_logger(__name__)
@@ -273,7 +274,14 @@ async def create_staff(
         print("Creating staff with this data:", staff.created_by)
         db.add(staff)
         await db.flush()
+        leave_init_service = LeaveInitializationService()
 
+        await leave_init_service.initialize_staff_leave_balances(
+            db=db,
+            staff_id=staff.id,
+            join_date=staff.join_date,
+            created_by=str(current_user_id),
+        )
     # -------------------------------------------------
     # 4️⃣ Fetch Related Names
     # -------------------------------------------------
