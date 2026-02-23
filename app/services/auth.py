@@ -201,7 +201,9 @@ class AuthService:
             return None
         
         # Get user
-        user = await self.tenant_user_crud.get(db, db_token.user_id)
+        sessionmaker = await get_tenant_session(db, db_token.tenant_id)
+        async with sessionmaker() as tenant_db:
+            user = await self.tenant_user_crud.get(db, db_token.user_id)
         if not user:
             logger.warning("Token refresh failed: User not found or inactive")
             return None
