@@ -61,11 +61,12 @@ async def login(
     user_agent = request.headers.get("User-Agent")
     
     # Create tokens
-    access_token, refresh_token, _ = await auth_service.create_tokens(
+    access_token, refresh_token, permissions = await auth_service.create_tokens(
         db,
         user,
         tenant_id=tenant['id'],
-        user_agent=user_agent
+        user_agent=user_agent,
+        is_tenant_login=True
     )
     
     logger.info(f"User {user.id} logged in successfully")
@@ -76,7 +77,8 @@ async def login(
         token_type="bearer",
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         tenant=tenant,
-        multiple_tenants_found=multiple_tenants_found
+        multiple_tenants_found=multiple_tenants_found,
+        permissions=permissions
     )
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -136,14 +138,15 @@ async def refresh_token(
             detail="Invalid or expired refresh token"
         )
     
-    access_token, new_refresh_token, tenant_id = result
+    access_token, new_refresh_token, tenant_id , permissions = result
     
     return TokenResponse(
         access_token=access_token,
         refresh_token=new_refresh_token,
         token_type="bearer",
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        tenant_id=tenant_id
+        tenant_id=tenant_id ,
+        permissions=permissions
     )
 
 
@@ -251,12 +254,12 @@ async def get_user_tenants(
     db: AsyncSession = Depends(get_common_db)
 ):
     """Get all tenants for the current user."""
-    user_id = getattr(request.state, 'user_id', None)
+    user_id = getattr(request.state, 'common_id', None)
     
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
+            detail=f"Authentication required tenant_user id :{user_id}"
         )
     
     tenants = await auth_service.get_user_tenants(db, user_id)
@@ -298,7 +301,7 @@ async def switch_tenant(
     tenant = [t for t in user_tenants if str(t['id']) == tenant_id][0]
     
     # Revoke old tokens
-    await auth_service.revoke_all_user_tokens(db, user_id)
+    # await auth_service.revoke_all_user_tokens(db, user_id)
     
     # Create new tokens for the selected tenant
     user_agent = request.headers.get("User-Agent")
