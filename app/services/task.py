@@ -1,3 +1,5 @@
+from warnings import filters
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,6 +21,7 @@ class TaskService:
         self.task_dependency_crud = CRUDService(TaskDependency)
         self.workflow_service = WorkflowService()
         self.workflow_state_crud = CRUDService(WorkflowState)
+        self.project_crud = CRUDService(Project)
 
 
     async def create_task(
@@ -32,6 +35,19 @@ class TaskService:
         and auto-create a default workflow.
         """
         project_id = data.project_id
+        project = await self.project_crud.get(db, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found"
+            )
+        all_tasks = await self.task_crud.get_multi(db, limit=-1, filters={"project_id": project_id, 'ticket_code':project.code})
+        if len(all_tasks) > 0:
+            max_ticket_number = max([task.ticket_number for task in all_tasks if task.ticket_number is not None] or [0])
+            data.ticket_number = max_ticket_number + 1
+        else:
+            data.ticket_number = 1000
+        data.ticket_code = project.code
         result = await db.execute(
             select(WorkflowState.id)
             .join(Workflow, WorkflowState.workflow_id == Workflow.id)
@@ -196,6 +212,9 @@ class TaskService:
             billable=task.billable,
             created_at=task.created_at,
             updated_at=task.updated_at,
+            ticket=f"{task.ticket_code}-{task.ticket_number}" if task.ticket_code and task.ticket_number else None,
+            ticket_code=task.ticket_code,
+            ticket_number=task.ticket_number,
             assignees=[
                 {
                     'assignee_id': assignee.id,
@@ -299,3 +318,46 @@ class TaskService:
             updated_by=user_id
         )
         return updated_comment
+
+    async def get_backlogs(self, db: AsyncSession, project_id: str):
+        """
+        Get all backlog tasks for a project.
+        """
+        tasks = await self.task_crud.get_multi(
+            db,
+            limit=-1,
+            filters={'sprint_id': None, 'project_id': project_id}
+        )
+    
+        task_responses = []
+        for task in tasks:
+            state = await self.workflow_state_crud.get(db, task.workflow_state_id)
+            task_responses.append(TaskResponse(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                priority=task.priority,
+                task_type=task.task_type,
+                estimated_hours=task.estimated_hours,
+                estimated_cost=task.estimated_cost,
+                start_date=task.start_date,
+                due_date=task.due_date,
+                project_id=task.project_id,
+                parent_task_id=task.parent_task_id,
+                workflow_state_id=task.workflow_state_id,
+                workflow_state_name=state.name if state else None,
+                actual_hours=task.actual_hours,
+                actual_cost=task.actual_cost,
+                completed_at=task.completed_at,
+                created_by=task.created_by,
+                progress_percentage=task.progress_percentage,
+                milestone=task.milestone,
+                billable=task.billable,
+                created_at=task.created_at,
+                updated_at=task.updated_at,
+                assignees=[],
+                ticket=f"{task.ticket_code}-{task.ticket_number}" if task.ticket_code and task.ticket_number else None,
+                ticket_code=task.ticket_code,
+                ticket_number=task.ticket_number
+            ))
+        return task_responses

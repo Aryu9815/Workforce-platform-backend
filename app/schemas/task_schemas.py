@@ -38,6 +38,8 @@ class TaskBase(BaseSchema):
     estimated_cost: Optional[float] = None
     start_date: Optional[date] = None
     due_date: Optional[date] = None
+    ticket_number: Optional[int] = None
+    ticket_code: Optional[str] = None
 
 
 class TaskCreate(TaskBase):
@@ -84,6 +86,7 @@ class TaskResponse(TaskBase, TimestampSchema):
     milestone: bool
     billable: bool
     assignees: List[Dict[str, Any]] = []
+    ticket: Optional[str] = None
 
 class CommentBase(BaseSchema):
     """Base comment schema."""

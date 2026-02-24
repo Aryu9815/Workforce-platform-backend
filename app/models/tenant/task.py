@@ -41,7 +41,8 @@ class Task(TenantBase, TenantScopedMixin):
     location = Column(JSONB, nullable=True)
     custom_fields = Column(JSONB, default=dict)
     tags = Column(JSONB, default=list)
-
+    ticket_code = Column(String(50),  nullable=True)
+    ticket_number = Column(Integer, nullable=True)
 
 class TaskAssignee(TenantBase, TenantScopedMixin):
     """Task assignees."""

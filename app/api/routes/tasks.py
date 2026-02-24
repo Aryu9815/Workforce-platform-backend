@@ -92,7 +92,10 @@ async def list_tasks(
             billable=task.billable,
             created_at=task.created_at,
             updated_at=task.updated_at,
-            assignees=[]
+            assignees=[],
+            ticket=f"{task.ticket_code}-{task.ticket_number}" if task.ticket_code and task.ticket_number else None,
+            ticket_code=task.ticket_code,
+            ticket_number=task.ticket_number
         ))
     
     return PaginatedResponse.create(
@@ -120,41 +123,7 @@ async def list_backlog_tasks(
     
     total = await task_crud.count(db, filters=filters)
     
-    tasks = await task_crud.get_multi(
-        db,
-        skip=pagination.skip,
-        limit=pagination.limit,
-        filters=filters
-    )
-    
-    task_responses = []
-    for task in tasks:
-        task_responses.append(TaskResponse(
-            id=task.id,
-            title=task.title,
-            description=task.description,
-            priority=task.priority,
-            task_type=task.task_type,
-            estimated_hours=task.estimated_hours,
-            estimated_cost=task.estimated_cost,
-            start_date=task.start_date,
-            due_date=task.due_date,
-            project_id=task.project_id,
-            parent_task_id=task.parent_task_id,
-            workflow_state_id=task.workflow_state_id,
-            status_name=None,
-            status_color=None,
-            actual_hours=task.actual_hours,
-            actual_cost=task.actual_cost,
-            completed_at=task.completed_at,
-            created_by=task.created_by,
-            progress_percentage=task.progress_percentage,
-            milestone=task.milestone,
-            billable=task.billable,
-            created_at=task.created_at,
-            updated_at=task.updated_at,
-            assignees=[]
-        ))
+    task_responses = await task_service.get_backlogs(db, project_id)
     
     return PaginatedResponse.create(
         items=task_responses,

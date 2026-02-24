@@ -532,6 +532,8 @@ CREATE TABLE tasks (
     parent_task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
     title VARCHAR(500) NOT NULL,
     description TEXT,
+    ticket_code VARCHAR(50),
+    ticket_number INT,
     status_id UUID REFERENCES statuses(id) ON DELETE SET NULL,
     priority VARCHAR(20) DEFAULT 'medium',
     task_type VARCHAR(50),
