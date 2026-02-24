@@ -1,9 +1,9 @@
 """
 Attendance management API routes.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-
 # from scipy.fftpack import shift
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy import and_
 from app.models.tenant import Shift
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -58,18 +58,24 @@ async def list_attendance(
     """List attendance records with filtering."""
     
     filters = {}
+    extra_conditions=[]
     if staff_id:
         filters["staff_id"] = staff_id
     if status:
         filters["status"] = status
-    
-    total = await attendance_crud.count(db, filters=filters)
+    if start_date:
+        extra_conditions.append(AttendanceRecord.date >= start_date)
+
+    if end_date:
+        extra_conditions.append(AttendanceRecord.date <= end_date)
+    total = await attendance_crud.count(db, filters=filters , extra_conditions=extra_conditions)
     
     records = await attendance_crud.get_multi(
         db,
         skip=pagination.skip,
         limit=pagination.limit,
         filters=filters,
+        extra_conditions=extra_conditions ,
         order_by="date"
     )
     record_responses = []
@@ -275,31 +281,6 @@ async def create_leave_request(
 
 
 
-
-# @router.post("/leave/test-run-accrual")
-# async def test_run_accrual(
-#     year: int,
-#     month: int,
-#     db: AsyncSession = Depends(get_db_session),
-# ):
-#     """
-#     TEST ONLY:
-#     Manually trigger monthly leave accrual.
-#     Use from Swagger for testing.
-#     """
-
-#     leave_service = LeaveService()
-
-#     await leave_service.accrue_monthly_leaves(
-#         db=db,
-#         year=year,
-#         month=month,
-#     )
-
-#     return {
-#         "success": True,
-#         "message": f"Accrual executed for {year}-{month}"
-#     }
 @router.post("/leave-type", response_model=LeaveRequestResponse, status_code=status.HTTP_201_CREATED)
 # @require_permissions(["attendance:mark"])
 async def create_leave_type(

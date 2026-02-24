@@ -32,6 +32,9 @@ from app.api.routes import (
     workflow_router,
     assets_router,
     sprint_router,
+    permission_role_router,
+    role_router,
+    permission_router
 )
 
 # Setup logging
@@ -151,7 +154,9 @@ app.include_router(reimbursements_router, prefix=f"{API_V1_PREFIX}")
 app.include_router(workflow_router, prefix=f"{API_V1_PREFIX}")
 app.include_router(assets_router , prefix=f"{API_V1_PREFIX}")
 app.include_router(sprint_router, prefix=f"{API_V1_PREFIX}")
-
+app.include_router(permission_role_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(permission_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(role_router , prefix=f"{API_V1_PREFIX}" )
 
 
 # Dashboard endpoint

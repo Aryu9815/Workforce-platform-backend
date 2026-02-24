@@ -217,15 +217,16 @@ async def create_staff(
             # ---------------------------------------------
             # Add tenant mapping
             # ---------------------------------------------
-            db.add(
-                TenantUser(
-                    tenant_id=tenant_id,
-                    user_id=user.id,
-                    invited_by=current_user_id,
-                    created_by=str(current_user_id),
-                    updated_by=str(current_user_id),
-                )
+            tenant_user = TenantUser(
+                tenant_id=tenant_id,
+                user_id=user.id,
+                invited_by=current_user_id,
+                created_by=str(current_user_id),
+                updated_by=str(current_user_id),
             )
+
+            db.add(tenant_user)
+            await db.flush()   # VERY IMPORTANT
 
             # Update JSONB safely
             if str(tenant_id) not in (user.tenant_ids or []):
@@ -249,15 +250,17 @@ async def create_staff(
             common_db.add(user)
             await common_db.flush()
 
-            db.add(
-                TenantUser(
-                    tenant_id=tenant_id,
-                    user_id=user.id,
-                    invited_by=current_user_id,
-                    created_by=str(current_user_id),
-                    updated_by=str(current_user_id),
-                )
+            tenant_user = TenantUser(
+                tenant_id=tenant_id,
+                user_id=user.id,
+                invited_by=current_user_id,
+                created_by=str(current_user_id),
+                updated_by=str(current_user_id),
             )
+
+            db.add(tenant_user)
+            await db.flush()   # VERY IMPORTANT
+
 
         # -------------------------------------------------
         # 3️⃣ Create Staff Profile (Tenant Scoped)
@@ -267,7 +270,7 @@ async def create_staff(
         staff_dict.pop("updated_by", None)
         staff = StaffProfile(
             **staff_dict,
-            user_id=user.id,
+            user_id=tenant_user.id,
             created_by=str(current_user_id),
             updated_by=str(current_user_id),
         )

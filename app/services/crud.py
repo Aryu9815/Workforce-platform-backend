@@ -100,7 +100,8 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         include_deleted: bool = False,
         include_inactive: bool = False,
         order_by: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        extra_conditions: Optional[List[Any]] = None,
     ) -> List[ModelType]:
         """Get multiple records with pagination."""
         query = select(self.model)
@@ -112,7 +113,10 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             for key, value in filters.items():
                 if hasattr(self.model, key):
                     query = query.where(getattr(self.model, key) == value)
-        
+        # Apply extra conditions (like date range)
+        if extra_conditions:
+            for condition in extra_conditions:
+                query = query.where(condition)
         # Apply ordering
         if order_by and hasattr(self.model, order_by):
             query = query.order_by(getattr(self.model, order_by))
@@ -132,7 +136,8 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
          
         include_deleted: bool = False,
         include_inactive: bool = False,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        extra_conditions: Optional[List[Any]] = None,   # 👈 ADD THIS
     ) -> int:
         """Count records."""
         query = select(func.count(self.model.id))
@@ -144,7 +149,10 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             for key, value in filters.items():
                 if hasattr(self.model, key) and value is not None:
                     query = query.where(getattr(self.model, key) == value)
-        
+        # Apply extra conditions (like date range)
+        if extra_conditions:
+            for condition in extra_conditions:
+                query = query.where(condition)
         result = await db.execute(query)
         return result.scalar()
     

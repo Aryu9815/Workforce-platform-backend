@@ -125,22 +125,25 @@ class AuthService:
     async def create_tokens(
         self,
         db: AsyncSession,
-        user: User,
+        user: User,#common user 
         tenant_id: Optional[str] = None,
         user_agent: Optional[str] = None,
         is_tenant_login: bool = False
     ) -> Tuple[str, str]:
         """Create access and refresh tokens for a user."""
         permissions = []
-        if is_tenant_login and tenant_id:
+        # if is_tenant_login and tenant_id:
+        if  tenant_id:
             sessionmaker = await get_tenant_session(db, tenant_id)
             async with sessionmaker() as tenant_db:
                 # Get user permissions
                 tenant_user = await self.get_tenant_user(tenant_db, user.id)
                 if not tenant_user:
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not belong to the specified tenant")
+                # tenant_user_id = tenant_user.id
                 permissions = await self.get_user_permissions(tenant_db, tenant_user.id, tenant_id)
-
+        # else :
+        #     tenant_user_id = user.id  # fallback (rare case)
         # Create tokens
         access_token = create_access_token(
             user_id=str(tenant_user.id) if is_tenant_login and tenant_id else str(user.id),
@@ -181,6 +184,7 @@ class AuthService:
         """Refresh access token using refresh token."""
         # Verify refresh token
         token_data = verify_token(refresh_token_str, token_type="refresh")
+        # common_user = await self.user_crud.get(db, token_data.common_id)
         if not token_data:
             logger.warning("Token refresh failed: Invalid refresh token")
             return None
@@ -202,9 +206,12 @@ class AuthService:
         
         # Get user
         sessionmaker = await get_tenant_session(db, db_token.tenant_id)
-        async with sessionmaker() as tenant_db:
-            user = await self.tenant_user_crud.get(db, db_token.user_id)
-        if not user:
+        # async with sessionmaker() as tenant_db:
+        #     user = await self.tenant_user_crud.get(db, db_token.user_id)
+        # Get Common User first
+        common_user = await self.user_crud.get(db, db_token.user_id)
+
+        if not common_user:
             logger.warning("Token refresh failed: User not found or inactive")
             return None
         
@@ -212,16 +219,16 @@ class AuthService:
         db_token.revoked_at = datetime.now(timezone.utc)
         
         # Create new tokens
-        access_token, new_refresh_token, _ = await self.create_tokens(
+        access_token, new_refresh_token, permissions = await self.create_tokens(
             db,
-            user,
+            common_user,
             tenant_id=str(db_token.tenant_id) if db_token.tenant_id else None,
             user_agent=db_token.user_agent,
             is_tenant_login=True if db_token.tenant_id else False
         )
         
-        logger.info(f"Tokens refreshed for user {user.id}")
-        return access_token, new_refresh_token, str(db_token.tenant_id) if db_token.tenant_id else None
+        logger.info(f"Tokens refreshed for common user {common_user.id}")
+        return access_token, new_refresh_token, str(db_token.tenant_id) , permissions if db_token.tenant_id else None
     
     async def revoke_refresh_token(
         self,
