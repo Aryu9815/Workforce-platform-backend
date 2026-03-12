@@ -1,5 +1,3 @@
-from app.models.tenant.approvals import *
-from app.models.tenant.audit_event import *
 from app.models.tenant.file_manage import *
 from app.models.tenant.rbac_models import *
 from app.models.tenant.tenant_user import *
@@ -10,4 +8,7 @@ from app.models.tenant.finance import *
 from app.models.tenant.workflow import *
 from app.models.tenant.attendance import *
 from app.models.tenant.assets import *
+from app.models.tenant.sprints import *
+from app.models.tenant.notification import *
+from app.models.tenant.task_work_session import *
 from app.models.tenant.sprints import *

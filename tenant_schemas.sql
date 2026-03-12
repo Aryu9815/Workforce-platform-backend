@@ -468,6 +468,25 @@ CREATE TABLE transition_rules (
     updated_by VARCHAR(255)
 );
 
+CREATE TABLE sprints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    goal TEXT,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status VARCHAR(20),
+    capacity INTEGER,
+
+    -- TenantScopedMixin
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255)
+);
+
 -- 6.1 projects
 CREATE TABLE projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -476,7 +495,6 @@ CREATE TABLE projects (
     description TEXT,
     status VARCHAR(20) DEFAULT 'planning',
     priority VARCHAR(20) DEFAULT 'medium',
-    project_type VARCHAR(50),
     parent_project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
     client_id UUID REFERENCES staff_profiles(id) ON DELETE SET NULL,
     project_manager_id UUID NOT NULL REFERENCES staff_profiles(id) ON DELETE RESTRICT,
@@ -536,7 +554,6 @@ CREATE TABLE tasks (
     ticket_number INT,
     status_id UUID REFERENCES statuses(id) ON DELETE SET NULL,
     priority VARCHAR(20) DEFAULT 'medium',
-    task_type VARCHAR(50),
     estimated_hours NUMERIC(6,2),
     actual_hours NUMERIC(6,2) DEFAULT 0,
     estimated_cost NUMERIC(12,2),
@@ -1021,3 +1038,18 @@ CREATE TABLE domain_events (
     updated_by VARCHAR(255)
 );
 
+
+
+CREATE TABLE IF NOT EXISTS public.notifications
+(
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    title text COLLATE pg_catalog."default" NOT NULL,
+    message text COLLATE pg_catalog."default" NOT NULL,
+    entity_type text COLLATE pg_catalog."default",
+    entity_id uuid,
+    is_read boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT now(),
+    CONSTRAINT notifications_pkey PRIMARY KEY (id)
+)

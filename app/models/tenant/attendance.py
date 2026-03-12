@@ -1,18 +1,12 @@
 import uuid
-from datetime import datetime
-from typing import Optional, List
 from sqlalchemy import (
     Column, String, Text, DateTime, Date, Time, Boolean, Integer, 
-    Numeric, ForeignKey, Index, UniqueConstraint, CheckConstraint,
-    ARRAY, JSON
+    Numeric, ForeignKey, UniqueConstraint, ARRAY
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
-from sqlalchemy.orm import relationship, declared_attr
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-
-from app.db.base import Base
 from app.db.db_connection import TenantScopedMixin, TenantBase
-
+from app.core.constants import STAFF_PROFILE_ID, SET_NULL
 
 
 
@@ -50,9 +44,9 @@ class AttendanceRecord(TenantBase, TenantScopedMixin):
     __tablename__ = "attendance_records"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete="CASCADE"), nullable=False)
     date = Column(Date, nullable=False)
-    shift_id = Column(UUID(as_uuid=True), ForeignKey("shifts.id", ondelete="SET NULL"), nullable=True)
+    shift_id = Column(UUID(as_uuid=True), ForeignKey("shifts.id", ondelete=SET_NULL), nullable=True)
     check_in = Column(DateTime(timezone=True), nullable=True)
     check_out = Column(DateTime(timezone=True), nullable=True)
     check_in_location = Column(JSONB, nullable=True)
@@ -64,9 +58,9 @@ class AttendanceRecord(TenantBase, TenantScopedMixin):
     status = Column(String(20), default="present")  # present, absent, late, half_day
     notes = Column(Text, nullable=True)
     is_manual_entry = Column(Boolean, default=False)
-    approved_by = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
-    
-
+    approved_by = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete=SET_NULL), nullable=True)
+    task_time_log = Column(JSONB, default=list)
+   
 class LeaveType(TenantBase, TenantScopedMixin):
     """Leave type definitions."""
     __tablename__ = "leave_types"
@@ -88,14 +82,14 @@ class LeaveRequest(TenantBase, TenantScopedMixin):
     __tablename__ = "leave_requests"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete="CASCADE"), nullable=False)
     leave_type_id = Column(UUID(as_uuid=True), ForeignKey("leave_types.id", ondelete="RESTRICT"), nullable=False)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     days_requested = Column(Numeric(4, 1), nullable=False)
     reason = Column(Text, nullable=True)
     status = Column(String(20), default="pending")
-    approved_by = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete=SET_NULL), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     approval_notes = Column(Text, nullable=True)
     documents = Column(JSONB, default=list)

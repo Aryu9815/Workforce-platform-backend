@@ -3,26 +3,111 @@
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from uuid import UUID
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.tenant import AttendanceRecord, Shift, LeaveRequest, Holiday , LeaveType , LeaveAccrualLog
-from app.schemas.attendance import LeaveRequestCreate
-from app.services.crud import CRUDService
-from app.events.publisher import publish_event, EventType
-from app.models.tenant.staff import StaffProfile , StaffLeaveBalance
+from app.schemas import LeaveRequestCreate
+from app.services.crud import(
+    attendance_crud,shift_crud,leave_crud,
+    staff_leave_balance_crud as leave_balance_crud,
+    holiday_crud,leave_type_crud, leave_accrual_log_crud as accrual_log_crud,
+    staff_crud
+)
 
 class LeaveService:
 
     def __init__(self):
-        self.attendance_crud = CRUDService(AttendanceRecord)
-        self.shift_crud = CRUDService(Shift)
-        self.leave_crud = CRUDService(LeaveRequest)
-        self.holiday_crud = CRUDService(Holiday)
-        self.staff_crud = CRUDService(StaffProfile)
-        self.leave_balance_crud = CRUDService(StaffLeaveBalance)
-        self.leave_type_crud = CRUDService(LeaveType)
-        self.accrual_log_crud = CRUDService(LeaveAccrualLog)
+        """Future implementation"""
+        pass
+    async def _check_leave_exists_or_pending(self, db, leave_id):
+        leave = await leave_crud.get(db, leave_id)
+        if not leave:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave not found")
+
+        if leave.status != "pending":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already processed")
+        return leave
+
+    async def _adjust_leave_balance(self, db, leave):
+
+        balance = await leave_balance_crud.get_by_fields(
+            db,
+            fields={
+                "staff_id": leave.staff_id,
+                "leave_type_id": leave.leave_type_id,
+                "year": leave.start_date.year,
+            },
+        )
+        if not balance:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Leave balance not initialized. Accrual not processed for this period."
+            )
+        balance = balance[0]
+
+        # Deduct balance
+        leave_type = await leave_type_crud.get(db, leave.leave_type_id)
+        if leave_type.is_paid:
+            # Validate quota only for paid leave
+            if balance.remaining_days < leave.days_requested:
+                raise HTTPException(400, "Insufficient leave balance")
+            balance.used_days += leave.days_requested
+            balance.remaining_days -= leave.days_requested
+            leave.is_payroll_deducted = False
+        else:
+            # unpaid leave
+            leave.approval_notes = "Unpaid Leave - Payroll Deduction Applicable"
+            leave.is_payroll_deducted = True
+
+    async def _adjust_attendance(self, db, leave, approver_id):
+        shift = await shift_crud.get(
+            db,
+            (await staff_crud.get(db, leave.staff_id)).shift_id
+        )
+        current_date = leave.start_date
+        while current_date <= leave.end_date:
+            # Skip Holiday
+            holiday = await holiday_crud.get_by_fields(
+                db,
+                fields={"date": current_date}
+            )
+            if holiday:
+                current_date += timedelta(days=1)
+                continue
+            # Skip Non-working day based on shift
+            if shift and shift.days_of_week:
+                weekday = current_date.weekday()  # 0=Mon ... 6=Sun
+                if weekday not in shift.days_of_week:
+                    current_date += timedelta(days=1)
+                    continue
+            # Prevent duplicate attendance
+
+            existing = await attendance_crud.get_by_fields(
+                    db,
+                    fields={
+                        "staff_id": leave.staff_id,
+                        "date": current_date,
+                    },
+                )
+            if existing:
+                record = existing[0]
+                record.status = "leave"
+                record.is_manual_entry = True
+                record.notes = "Approved Leave"
+                record.updated_by = approver_id
+            else : 
+                await attendance_crud.create(
+                    db,
+                    obj_in={
+                        "staff_id": leave.staff_id,
+                        "date": current_date,
+                        "status": "leave",
+                        "is_manual_entry": True,
+                        "notes": "Approved Leave",
+                        "created_by": approver_id,
+                    },
+                )
+
+            current_date += timedelta(days=1)
 
     async def approve_leave(
         self,
@@ -33,119 +118,14 @@ class LeaveService:
         notes: str | None = None,
     ):
 
-        leave = await self.leave_crud.get(db, leave_id)
-        leave_type = await self.leave_type_crud.get(db, leave.leave_type_id)
-        if not leave:
-            raise HTTPException(404, "Leave not found")
-
-        if leave.status != "pending":
-            raise HTTPException(409, "Already processed")
+        leave = await self._check_leave_exists_or_pending(db, leave_id)
 
         if approval_status == "approved":
 
-            # 1️⃣ Fetch leave balance
-            balance = await self.leave_balance_crud.get_by_fields(
-                db,
-                fields={
-                    "staff_id": leave.staff_id,
-                    "leave_type_id": leave.leave_type_id,
-                    "year": leave.start_date.year,
-                },
-            )
+            await self._adjust_leave_balance(db, leave)
 
-            # if not balance:
-            #     # raise HTTPException(400, "Leave balance not initialized")
-            #     # Auto-initialize balance if not found (edge case) future create api schedule job to initialize all balances at year start
-            #     balance = await self.leave_balance_crud.create(
-            #         db,
-            #         obj_in={
-            #             "staff_id": leave.staff_id,
-            #             "leave_type_id": leave.leave_type_id,
-            #             "year": leave.start_date.year,
-            #             "allocated_days": Decimal(leave_type.max_days_per_year or 0),
-            #             "used_days": Decimal("0"),
-            #             "remaining_days": Decimal(leave_type.max_days_per_year or 0),
-            #             "created_by": "system"
-            #         }
-            #     )
-            # else :
-            #     balance = balance[0]
-
-            if not balance:
-                raise HTTPException(
-                    400,
-                    "Leave balance not initialized. Accrual not processed for this period."
-                )
-
-            balance = balance[0]
-
-
-            # 3️⃣ Deduct balance
-            
-            leave_type = await self.leave_type_crud.get(db, leave.leave_type_id)
-
-            if leave_type.is_paid:
-                # Validate quota only for paid leave
-                if balance.remaining_days < leave.days_requested:
-                    raise HTTPException(400, "Insufficient leave balance")
-                balance.used_days += leave.days_requested
-                balance.remaining_days -= leave.days_requested
-                leave.is_payroll_deducted = False
-            else:
-                # unpaid leave
-                leave.approval_notes = "Unpaid Leave - Payroll Deduction Applicable"
-                leave.is_payroll_deducted = True
-            # 4️⃣ Create attendance entries
-            # Fetch staff shift once
-            shift = await self.shift_crud.get(
-                db,
-                (await self.staff_crud.get(db, leave.staff_id)).shift_id
-            )
-            current_date = leave.start_date
-            while current_date <= leave.end_date:
-                # Skip Holiday
-                holiday = await self.holiday_crud.get_by_fields(
-                    db,
-                    fields={"date": current_date}
-                )
-                if holiday:
-                    current_date += timedelta(days=1)
-                    continue
-                # Skip Non-working day based on shift
-                if shift and shift.days_of_week:
-                    weekday = current_date.weekday()  # 0=Mon ... 6=Sun
-                    if weekday not in shift.days_of_week:
-                        current_date += timedelta(days=1)
-                        continue
-                # Prevent duplicate attendance
-
-                existing = await self.attendance_crud.get_by_fields(
-                        db,
-                        fields={
-                            "staff_id": leave.staff_id,
-                            "date": current_date,
-                        },
-                    )
-                if existing:
-                    record = existing[0]
-                    record.status = "leave"
-                    record.is_manual_entry = True
-                    record.notes = "Approved Leave"
-                    record.updated_by = approver_id
-                else : 
-                    await self.attendance_crud.create(
-                        db,
-                        obj_in={
-                            "staff_id": leave.staff_id,
-                            "date": current_date,
-                            "status": "leave",
-                            "is_manual_entry": True,
-                            "notes": "Approved Leave",
-                            "created_by": approver_id,
-                        },
-                    )
-
-                current_date += timedelta(days=1)
+            # Create attendance entries
+            await self._adjust_attendance(db, leave, approver_id)
 
         # 5️⃣ Update leave record
         leave.status = approval_status
@@ -157,29 +137,43 @@ class LeaveService:
         await db.refresh(leave)
 
         return leave
+    
     async def create_leave(self , db: AsyncSession, leave_data: LeaveRequestCreate, current_user_id: UUID):
             
-        leave = await self.leave_crud.create(
+        leave = await leave_crud.create(
             db,
             obj_in={**leave_data.model_dump(), "created_by": current_user_id}
         )
         await db.commit()
         await db.refresh(leave)
-        # Publish event
-        await publish_event(
-            event_type=EventType.LEAVE_REQUESTED,
-            aggregate_type="leave",
-            aggregate_id=str(leave.id),
-            payload={
-                "staff_id": str(leave.staff_id),
-                "leave_type_id": str(leave.leave_type_id),
-                "start_date": leave.start_date.isoformat(),
-                "end_date": leave.end_date.isoformat(),
-                "days": leave.days_requested
-            }
-        )
         return leave
 
+    async def _validate_accure_request(self, db, month, year):
+        # Validate month range
+        if month < 1 or month > 12:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid month value")
+
+        # Prevent future accrual
+        today = datetime.now().date()
+
+        if year > today.year or (year == today.year and month > today.month):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot accrue future period")
+
+        # Check duplicate accrual
+        existing = await accrual_log_crud.get_by_fields(
+            db,
+            fields={
+                "year": year,
+                "month": month,
+            }
+        )
+
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Accrual already processed for {year}-{month}"
+            )
+        
 
     async def accrue_monthly_leaves(
         self,
@@ -197,35 +191,12 @@ class LeaveService:
         - Fully transactional
         """
 
-        # 🔐 0️⃣ Validate month range
-        if month < 1 or month > 12:
-            raise HTTPException(400, "Invalid month value")
-
-        # 🔐 1️⃣ Prevent future accrual
-        today = datetime.now().date()
-
-        if year > today.year or (year == today.year and month > today.month):
-            raise HTTPException(400, "Cannot accrue future period")
-
-        # 🔐 2️⃣ Check duplicate accrual
-        existing = await self.accrual_log_crud.get_by_fields(
-            db,
-            fields={
-                "year": year,
-                "month": month,
-            }
-        )
-
-        if existing:
-            raise HTTPException(
-                400,
-                f"Accrual already processed for {year}-{month}"
-            )
+        await self._validate_accure_request(db, month, year)
 
         try:
 
-            # 3️⃣ Fetch active leave types (paid only)
-            leave_types = await self.leave_type_crud.get_multi(
+            # Fetch active leave types (paid only)
+            leave_types = await leave_type_crud.get_multi(
                 db,
                 filters={
                     "is_active": True,
@@ -233,8 +204,8 @@ class LeaveService:
                 }
             )
 
-            # 4️⃣ Fetch active staff
-            staff_members = await self.staff_crud.get_multi(
+            # Fetch active staff
+            staff_members = await staff_crud.get_multi(
                 db,
                 filters={"is_active": True},
                 limit=100000
@@ -243,19 +214,13 @@ class LeaveService:
             for staff in staff_members:
 
                 # Skip exited staff
-                if staff.exit_date:
-                    continue
-
-                # Skip if joined after this accrual month
-                if staff.join_date.year > year:
-                    continue
-
                 if (
-                    staff.join_date.year == year
-                    and staff.join_date.month > month
+                    staff.exit_date
+                    or staff.join_date.year > year
+                    or (staff.join_date.year == year and staff.join_date.month > month)
                 ):
                     continue
-
+                
                 for lt in leave_types:
 
                     if not lt.max_days_per_year:
@@ -266,7 +231,7 @@ class LeaveService:
                         Decimal(str(lt.max_days_per_year)) / Decimal("12")
                     ).quantize(Decimal("0.01"))
 
-                    balances = await self.leave_balance_crud.get_by_fields(
+                    balances = await leave_balance_crud.get_by_fields(
                         db,
                         fields={
                             "staff_id": staff.id,
@@ -280,7 +245,7 @@ class LeaveService:
                         balance.allocated_days += monthly_accrual
                         balance.remaining_days += monthly_accrual
                     else:
-                        await self.leave_balance_crud.create(
+                        await leave_balance_crud.create(
                             db,
                             obj_in={
                                 "staff_id": staff.id,
@@ -294,7 +259,7 @@ class LeaveService:
                         )
 
             # 6️⃣ Log accrual execution (financial control)
-            await self.accrual_log_crud.create(
+            await accrual_log_crud.create(
                 db,
                 obj_in={
                     "year": year,
@@ -312,7 +277,7 @@ class LeaveService:
 
     async def carry_forward_leaves(self, db: AsyncSession, year: int):
 
-        balances = await self.leave_balance_crud.get_multi(
+        balances = await leave_balance_crud.get_multi(
             db,
             limit=100000,
             filters={"year": year}
@@ -320,13 +285,13 @@ class LeaveService:
 
         for balance in balances:
 
-            leave_type = await self.leave_type_crud.get(db, balance.leave_type_id)
+            leave_type = await leave_type_crud.get(db, balance.leave_type_id)
 
             if not leave_type.carry_forward:
                 continue
 
             carry_days = balance.remaining_days
-            existing = await self.leave_balance_crud.get_by_fields(
+            existing = await leave_balance_crud.get_by_fields(
                 db,
                 fields={
                     "staff_id": balance.staff_id,
@@ -336,7 +301,7 @@ class LeaveService:
             )
             if existing:
                     
-                await self.leave_balance_crud.create(
+                await leave_balance_crud.create(
                     db,
                     obj_in={
                         "staff_id": balance.staff_id,
@@ -350,3 +315,5 @@ class LeaveService:
                 )
 
         await db.commit()
+
+leave_service = LeaveService()

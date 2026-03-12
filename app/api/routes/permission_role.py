@@ -1,26 +1,19 @@
-"""
-Role-Permission management API routes.
-Admin panel read + toggle APIs.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from uuid import UUID
-
 from app.db.base import get_db_session
-from app.services.crud import CRUDService
 from app.core.logging_config import get_logger
 from app.utils.rbac_middleware import require_permissions
-
-from app.models.tenant.rbac_models import (
+from app.models.tenant import (
     RolePermission,
     Role,
     Permission
 )
-
-from app.api.schemas import SuccessResponse
+from app.schemas import SuccessResponse
+from app.services.notification import notify
+from app.services.crud import role_permission_crud 
 
 logger = get_logger(__name__)
 router = APIRouter(
@@ -28,15 +21,13 @@ router = APIRouter(
     tags=["Role Permission Management"]
 )
 
-role_permission_crud = CRUDService(RolePermission)
-
 
 # ============================================================
 # List Role Permissions (Admin Panel Grid)
 # ============================================================
 
 @router.get("", response_model=List[dict])
-# @require_permissions(["role:view"])
+@require_permissions(["role:view"])
 async def list_role_permissions(
     request: Request,
     db: AsyncSession = Depends(get_db_session)
@@ -84,7 +75,7 @@ async def list_role_permissions(
 # ============================================================
 
 @router.patch("/{role_permission_id}/toggle", response_model=SuccessResponse)
-# @require_permissions(["role:update"])
+@require_permissions(["role:update"])
 async def toggle_role_permission(
     request: Request,
     role_permission_id: UUID,
@@ -95,10 +86,8 @@ async def toggle_role_permission(
     Used by admin panel switch.
     """
 
-    user_id = getattr(request.state, "common_id", None)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+    user_id = getattr(request.state, "user_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
     role_permission = await role_permission_crud.get(db, role_permission_id , include_inactive=True)
 
     if not role_permission or role_permission.is_deleted:
@@ -110,7 +99,7 @@ async def toggle_role_permission(
 
     await db.commit()
     await db.refresh(role_permission)
-
+    await notify.notify_role_permissions(db, role_permission, tenant_id, user_id)
     return SuccessResponse(
         message="Role permission status updated successfully"
     )

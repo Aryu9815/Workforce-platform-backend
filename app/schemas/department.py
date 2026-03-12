@@ -3,35 +3,49 @@
 """
 Pydantic schemas for API request/response validation.
 """
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
-from enum import Enum
+from pydantic import Field, field_validator
+from app.schemas.validators import (
+    validate_code_field,
+    validate_name_field,
+    validate_optional_str,
+)
+from app.schemas.base_schema import BaseSchema, TimestampSchema
 
-
-
-class BaseSchema(BaseModel):
-    """Base schema with common configuration."""
-    model_config = ConfigDict(from_attributes=True)
-
-class TimestampSchema(BaseSchema):
-    """Schema with timestamp fields."""
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    
 class DepartmentBase(BaseSchema):
     """Base department schema."""
     name: str = Field(..., min_length=1, max_length=100)
-    code: Optional[str] = Field(None, max_length=20)
+    code: str = Field(None, max_length=20)
     description: Optional[str] = None
     parent_id: Optional[UUID] = None
+    head_id: UUID
+
+
+    @field_validator("name")
+    def validate_name(cls, value):
+        return validate_name_field(value, max_length=100, field="name", only_letters=True)
+
+    @field_validator("code")
+    def validate_code(cls, value):
+        return validate_code_field(
+            value,
+            field="code",
+            max_length=20,
+        )
+
+    @field_validator("description")
+    def validate_description_field(cls, value):
+        return validate_optional_str(
+            value,
+            max_length=500,
+            field="description",
+        )
 
 
 class DepartmentCreate(DepartmentBase):
     """Department creation schema."""
     pass
-
 
 
 class DepartmentUpdate(BaseSchema):
@@ -42,10 +56,41 @@ class DepartmentUpdate(BaseSchema):
     head_id: Optional[UUID] = None
     is_active: Optional[bool] = None
 
+    @field_validator("name")
+    def validate_name(cls, value):
+        return validate_name_field(
+            value,
+            max_length=100,
+            field="name",
+            only_letters=True,
+            is_optional=True,
+        )
 
-class DepartmentResponse(DepartmentBase, TimestampSchema):
+    @field_validator("code")
+    def validate_code(cls, value):
+        return validate_code_field(
+            value,
+            field="code",
+            max_length=20,
+            is_optional=True,
+        )
+
+    @field_validator("description")
+    def validate_description_field(cls, value):
+        return validate_optional_str(
+            value,
+            max_length=500,
+            field="description",
+        )
+
+
+class DepartmentResponse(BaseSchema, TimestampSchema):
     """Department response schema."""
     id: UUID
+    name: str 
+    code: Optional[str]
+    description: Optional[str] = None
+    parent_id: Optional[UUID] = None
     head_id: Optional[UUID] = None
     is_active: bool
     staff_count: int = 0

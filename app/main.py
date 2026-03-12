@@ -11,9 +11,10 @@ from starlette.middleware import Middleware
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
 from app.db.base import db_manager
-from app.events import register_event_handlers
+from app.core.redis_manager import redis_manager
 from app.core.scheduler import scheduler, monthly_accrual_job
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.utils.notification_worker import process_pending_jobs, notification_cleaner, task_alert_job
 from app.middleware import (
     AuthMiddleware,
     TenantResolutionMiddleware,
@@ -34,8 +35,14 @@ from app.api.routes import (
     sprint_router,
     permission_role_router,
     role_router,
-    permission_router
+    permission_router,
+    notifications_router,
+    task_work_router,
+    dashboard_router,
+    ai_router,
+    task_label_router,
 )
+from dotenv import load_dotenv
 
 # Setup logging
 loggers = setup_logging()
@@ -43,8 +50,10 @@ logger = get_logger(__name__)
 
 
 # Redis client (initialized in lifespan)
-redis_client = None
+# redis_client = None
 
+scheduler = AsyncIOScheduler()
+scheduler_started = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,48 +65,47 @@ async def lifespan(app: FastAPI):
     db_manager.init_engine()
     logger.info("Database engine initialized")
     
-    # Initialize Redis
-    global redis_client
-    try:
-        redis_client = redis.from_url(
-            str(settings.REDIS_URL),
-            encoding="utf-8",
-            decode_responses=True
-        )
-        await redis_client.ping()
-        logger.info("Redis connection established")
-    except Exception as e:
-        logger.warning(f"Redis connection failed: {e}. Running without caching.")
-        redis_client = None
+    success = await redis_manager.connect()
+    if not success:
+        logger.warning("Redis connection failed. Running without caching.")
     
-    # Register event handlers
-    register_event_handlers()
-    logger.info("Event handlers registered")
     # ✅ START SCHEDULER HERE
-    scheduler.add_job(
-        monthly_accrual_job,
-        trigger="cron",
-        day=1,
-        hour=0,
-        minute=5,
-    )
-    scheduler.start()
-    logger.info("Scheduler started")
+    # scheduler.add_job(
+    #     monthly_accrual_job,
+    #     trigger="cron",
+    #     day=1,
+    #     hour=0,
+    #     minute=5,
+    # )
+    # scheduler.add_job(process_pending_jobs, "interval", seconds=10)
+    # scheduler.add_job(
+    #     notification_cleaner,
+    #     "cron",
+    #     hour=2,
+    # )
+    # scheduler.add_job(
+    #     task_alert_job,
+    #     trigger="cron",
+    #     hour=10,
+    #     minute=0,
+    # )
+    # scheduler.start()
+    # logger.info("Scheduler started")
     yield
     
     # Shutdown
-    logger.info("Shutting down application")
-    scheduler.shutdown()
-    logger.info("Scheduler stopped")
+    # logger.info("Shutting down application")
+    # scheduler.shutdown()
+    # logger.info("Scheduler stopped")
 
     # Close database connections
     await db_manager.close()
     logger.info("Database connections closed")
     
     # Close Redis connection
-    if redis_client:
-        await redis_client.close()
-        logger.info("Redis connection closed")
+    await redis_manager.clear_cache()
+    await redis_manager.close()
+    logger.info("Redis connection closed")
 
 middleware = [
     Middleware(
@@ -113,6 +121,7 @@ middleware = [
     Middleware(AuthMiddleware),
     Middleware(RateLimitMiddleware),
 ]
+load_dotenv()
 
 # Create FastAPI application
 app = FastAPI(
@@ -157,15 +166,18 @@ app.include_router(sprint_router, prefix=f"{API_V1_PREFIX}")
 app.include_router(permission_role_router , prefix=f"{API_V1_PREFIX}" )
 app.include_router(permission_router , prefix=f"{API_V1_PREFIX}" )
 app.include_router(role_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(notifications_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(task_work_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(dashboard_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(ai_router , prefix=f"{API_V1_PREFIX}" )
+app.include_router(task_label_router , prefix=f"{API_V1_PREFIX}" )
 
 
 # Dashboard endpoint
 @app.get(f"{API_V1_PREFIX}/dashboard", tags=["Dashboard"])
 async def get_dashboard_stats(request: Request):
     """Get dashboard statistics."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    # TODO: Calculate actual statistics from database
     return {
         "success": True,
         "data": {
@@ -196,6 +208,8 @@ async def root():
         "documentation": "/docs" if settings.DEBUG else None,
         "health": "/health"
     }
+
+
 
 
 if __name__ == "__main__":

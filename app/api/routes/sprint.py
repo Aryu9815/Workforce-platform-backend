@@ -1,34 +1,25 @@
-"""
-Task management API routes.
-"""
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
-
-from app.api.schemas import (
+from app.schemas import (
     PaginatedResponse,
     PaginationParams,
-    SuccessResponse
-)
-from app.schemas.sprint_schemas import (
+    SuccessResponse,
     SprintCreate,
     SprintEnd,
     SprintResponse,
     SprintUpdate
 )
-from app.models.tenant import  Sprint
 from app.db.base import get_db_session
-from app.services.crud import CRUDService
-from app.events.publisher import EventType, publish_event
+from app.services.crud import sprint_crud
 from app.core.logging_config import get_logger
-from app.services.sprints import SprintService
+from app.services import sprint_service, notify
 from app.utils.rbac_middleware import require_permissions
+
 logger = get_logger(__name__)
 router = APIRouter(prefix="/sprints", tags=["Sprint Management"])
 
-sprint_crud = CRUDService(Sprint)
-sprint_service = SprintService()
 
 
 @router.get("", response_model=PaginatedResponse)
@@ -61,6 +52,7 @@ async def list_sprints(
                 id=sprint.id,
                 project_id=sprint.project_id,
                 name=sprint.name,
+                sprint_number=sprint.sprint_number,
                 goal=sprint.goal,
                 status=sprint.status,
                 capacity=sprint.capacity,
@@ -89,25 +81,11 @@ async def create_sprint(
 ):
     """Create a new task."""
     user_id = getattr(request.state, 'user_id', None)
-    
     sprint = await sprint_service.create_sprint(
         db,
         user_id=user_id,
         data=sprint_data
     )
-     
-    # Publish event
-    await publish_event(
-        event_type=EventType.SPRINT_CREATED,
-        aggregate_type="sprint",
-        aggregate_id=str(sprint.id),
-        payload={
-            "name": sprint.name,
-            "project_id": str(sprint.project_id),
-            "created_by": user_id
-        }
-    )
-    
     logger.info(f"Task created: {sprint.id}")
     
     return SprintResponse(
@@ -147,6 +125,7 @@ async def update_sprint(
 ):
     """Update a task."""
     user_id = getattr(request.state, 'user_id', None)
+    tenant_id = getattr(request.state, 'tenant_id', None)
     
     updated_sprint = await sprint_service.update_sprint(
         db,
@@ -155,14 +134,12 @@ async def update_sprint(
         data=sprint_data
     )
     
-    # Publish event
-    await publish_event(
-        event_type=EventType.SPRINT_UPDATED,
-        aggregate_type="sprint",
-        aggregate_id=str(updated_sprint.id),
-        payload={
-            "name": updated_sprint.name,
-            "updated_by": user_id
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"Sprint updated: {updated_sprint.sprint_number}",
+            'message': f"You have updated the sprint {updated_sprint.sprint_number} named {updated_sprint.name}"
         }
     )
     
@@ -193,20 +170,16 @@ async def delete_sprint(
 ):
     """Soft delete a task."""
     user_id = getattr(request.state, 'user_id', None)
-    
+    tenant_id = getattr(request.state, 'tenant_id', None)
     sprint = await sprint_service.delete_sprint(db, sprint_id, user_id)
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.SPRINT_DELETED,
-        aggregate_type="sprint",
-        aggregate_id=str(sprint_id),
-        payload={
-            "name": sprint.name,
-            "deleted_by": user_id
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"Sprint deleted: {sprint.sprint_number}",
+            'message': f"You have deleted the sprint {sprint.sprint_number} named {sprint.name}"
         }
     )
-    
     logger.info(f"Task deleted: {sprint_id}")
     
     return SuccessResponse(message="Task deleted successfully")
@@ -220,7 +193,11 @@ async def end_sprint(
     db: AsyncSession = Depends(get_db_session)
 ):  
     user_id = getattr(request.state, 'user_id', None)
+    tenant_id = getattr(request.state, 'tenant_id', None)
     sprint = await sprint_service.end_sprint(db, sprint_id, user_id, end_sprint_data)
+    
+    await notify.notify_end_sprint(db, sprint, tenant_id, user_id)
+    
     return SprintResponse(
         id=sprint.id,
         project_id=sprint.project_id,

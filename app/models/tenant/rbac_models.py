@@ -1,18 +1,11 @@
 import uuid
-from datetime import datetime
-from typing import Optional, List
 from sqlalchemy import (
-    Column, String, Text, DateTime, Date, Time, Boolean, Integer, 
-    Numeric, ForeignKey, Index, UniqueConstraint, CheckConstraint,
-    ARRAY, JSON
+    Column, String, Text, DateTime, Boolean, ForeignKey, 
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
-from sqlalchemy.orm import relationship, declared_attr
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-
-from app.db.base import Base
 from app.db.db_connection import TenantScopedMixin, TenantBase
-
+from app.core.constants import ROLE_ID
 
 
 class Permission(TenantBase, TenantScopedMixin):
@@ -44,7 +37,7 @@ class RolePermission(TenantBase, TenantScopedMixin):
     __tablename__ = "role_permissions"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    role_id = Column(UUID(as_uuid=True), ForeignKey(ROLE_ID, ondelete="CASCADE"), nullable=False)
     permission_id = Column(UUID(as_uuid=True), ForeignKey("permissions.id", ondelete="CASCADE"), nullable=False)
     conditions = Column(JSONB, nullable=True)
 
@@ -55,9 +48,9 @@ class TenantUserRole(TenantBase, TenantScopedMixin):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False)
-    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    role_id = Column(UUID(as_uuid=True), ForeignKey(ROLE_ID, ondelete="CASCADE"), nullable=False)
     project_id = Column(UUID(as_uuid=True), nullable=True)  # Will be FK to projects
-    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    assigned_by = Column(UUID(as_uuid=True), nullable=False)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -68,7 +61,7 @@ class FieldPermission(TenantBase, TenantScopedMixin):
     __tablename__ = "field_permissions"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False)
+    role_id = Column(UUID(as_uuid=True), ForeignKey(ROLE_ID, ondelete="CASCADE"), nullable=False)
     entity_type = Column(String(50), nullable=False, index=True)
     field_name = Column(String(100), nullable=False)
     permission = Column(String(20), nullable=False)  # read, write, hidden

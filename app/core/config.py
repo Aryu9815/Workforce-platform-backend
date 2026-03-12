@@ -4,8 +4,7 @@ All configuration is loaded from environment variables.
 """
 from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import PostgresDsn, RedisDsn, field_validator
-import os
+from pydantic import field_validator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,7 +31,7 @@ class Settings(BaseSettings):
     DATABASE_POOL_RECYCLE: int = 3600
     
     # Redis
-    REDIS_URL: RedisDsn = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://localhost:6379/0"
     
     # JWT Authentication
     JWT_SECRET_KEY: str
@@ -77,17 +76,22 @@ class Settings(BaseSettings):
     AWS_S3_BUCKET: Optional[str] = None
     AWS_S3_REGION: str = "us-east-1"
     
-    # Email (Optional)
-    SMTP_HOST: Optional[str] = None
+    # Email
+    SMTP_HOST: Optional[str] = "smtp.gmail.com"
     SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USER: str = 'example@example.com'
+    SMTP_PASSWORD: str = 'password'
     SMTP_FROM_EMAIL: Optional[str] = None
     
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "app/logs"
     
+    # Vapid
+    VAPID_PUBLIC_KEY: str
+    VAPID_PRIVATE_KEY: str
+    VAPID_EMAIL: str
+
     # Pagination
     DEFAULT_PAGE_SIZE: int = 20
     MAX_PAGE_SIZE: int = 100
@@ -101,3 +105,4 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+print(f"setting Database URL >>>>>>>{settings.DATABASE_URL}")

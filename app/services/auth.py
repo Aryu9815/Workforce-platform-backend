@@ -1,12 +1,8 @@
-"""
-Authentication service for user management and JWT handling.
-"""
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from uuid import UUID
 import logging
 from app.models.common import User, TenantMaster, RefreshToken
 from app.models.tenant import TenantUserRole, RolePermission, Permission, TenantUser
@@ -18,20 +14,18 @@ from app.core.security import (
     verify_token
 )
 from app.core.config import settings
-from app.models.tenant.staff import StaffProfile
-from app.services.crud import CRUDService
+from app.services.crud import user_crud
 from app.utils.validators import validate_email, validate_password_strength, validate_phone
 from app.db.tenant_connection import get_tenant_session
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 class AuthService:
     """Service for authentication operations."""
     
     def __init__(self):
-        self.user_crud = CRUDService(User)
-        self.tenant_crud = CRUDService(TenantMaster)
-        self.tenant_user_crud = CRUDService(TenantUser)
+        """Future implementation"""
+        pass
 
     async def authenticate_user(
         self,
@@ -42,14 +36,14 @@ class AuthService:
         """Authenticate a user with email and password."""
         # Get user by email
         email = email.lower().strip()
-        user = await self.user_crud.get_by_field(db, field="email", value=email)
+        user = await user_crud.get_by_field(db, field="email", value=email)
         
         if not user:
             logger.warning(f"Authentication failed: User not found for email {email}")
             return None
         
         # Check if account is locked
-        if user.locked_until and user.locked_until > datetime.utcnow():
+        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
             logger.warning(f"Authentication failed: Account locked for user {user.id}")
             return None
         
@@ -60,7 +54,7 @@ class AuthService:
             
             # Lock account after 5 failed attempts
             if user.failed_login_attempts >= 5:
-                user.locked_until = datetime.utcnow() + timedelta(minutes=30)
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=30)
                 logger.warning(f"Account locked for user {user.id} due to multiple failed attempts")
             
             await db.flush()
@@ -70,7 +64,7 @@ class AuthService:
         # Reset failed login attempts on successful login
         user.failed_login_attempts = 0
         user.locked_until = None
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         await db.flush()
         
         logger.info(f"User {user.id} authenticated successfully")
@@ -98,7 +92,7 @@ class AuthService:
             raise ValueError("Password does not meet the strength requirements")
         
         # Check if user already exists
-        existing_user = await self.user_crud.get_by_field(db, field="email", value=email)
+        existing_user = await user_crud.get_by_field(db, field="email", value=email)
         if existing_user:
             raise ValueError(f"User with email {email} already exists")
 
@@ -117,7 +111,7 @@ class AuthService:
             "status": "active"
         }
         
-        user = await self.user_crud.create(db, obj_in=user_data)
+        user = await user_crud.create(db, obj_in=user_data)
         logger.info(f"New user registered: {user.id}")
         
         return user
@@ -125,25 +119,22 @@ class AuthService:
     async def create_tokens(
         self,
         db: AsyncSession,
-        user: User,#common user 
+        user: User,
         tenant_id: Optional[str] = None,
         user_agent: Optional[str] = None,
         is_tenant_login: bool = False
     ) -> Tuple[str, str]:
         """Create access and refresh tokens for a user."""
         permissions = []
-        # if is_tenant_login and tenant_id:
-        if  tenant_id:
+        if is_tenant_login and tenant_id:
             sessionmaker = await get_tenant_session(db, tenant_id)
             async with sessionmaker() as tenant_db:
                 # Get user permissions
                 tenant_user = await self.get_tenant_user(tenant_db, user.id)
                 if not tenant_user:
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not belong to the specified tenant")
-                # tenant_user_id = tenant_user.id
                 permissions = await self.get_user_permissions(tenant_db, tenant_user.id, tenant_id)
-        # else :
-        #     tenant_user_id = user.id  # fallback (rare case)
+
         # Create tokens
         access_token = create_access_token(
             user_id=str(tenant_user.id) if is_tenant_login and tenant_id else str(user.id),
@@ -184,7 +175,6 @@ class AuthService:
         """Refresh access token using refresh token."""
         # Verify refresh token
         token_data = verify_token(refresh_token_str, token_type="refresh")
-        # common_user = await self.user_crud.get(db, token_data.common_id)
         if not token_data:
             logger.warning("Token refresh failed: Invalid refresh token")
             return None
@@ -194,7 +184,7 @@ class AuthService:
             and_(
                 RefreshToken.refresh_token == refresh_token_str,
                 RefreshToken.revoked_at.is_(None),
-                RefreshToken.refresh_expires_at > datetime.utcnow()
+                RefreshToken.refresh_expires_at > datetime.now(timezone.utc)
             )
         )
         result = await db.execute(query)
@@ -205,13 +195,8 @@ class AuthService:
             return None
         
         # Get user
-        sessionmaker = await get_tenant_session(db, db_token.tenant_id)
-        # async with sessionmaker() as tenant_db:
-        #     user = await self.tenant_user_crud.get(db, db_token.user_id)
-        # Get Common User first
-        common_user = await self.user_crud.get(db, db_token.user_id)
-
-        if not common_user:
+        user = await user_crud.get(db, db_token.user_id)
+        if not user:
             logger.warning("Token refresh failed: User not found or inactive")
             return None
         
@@ -219,16 +204,16 @@ class AuthService:
         db_token.revoked_at = datetime.now(timezone.utc)
         
         # Create new tokens
-        access_token, new_refresh_token, permissions = await self.create_tokens(
+        access_token, new_refresh_token, _ = await self.create_tokens(
             db,
-            common_user,
+            user,
             tenant_id=str(db_token.tenant_id) if db_token.tenant_id else None,
             user_agent=db_token.user_agent,
             is_tenant_login=True if db_token.tenant_id else False
         )
         
-        logger.info(f"Tokens refreshed for common user {common_user.id}")
-        return access_token, new_refresh_token, str(db_token.tenant_id) , permissions if db_token.tenant_id else None
+        logger.info(f"Tokens refreshed for user {user.id}")
+        return access_token, new_refresh_token, str(db_token.tenant_id) if db_token.tenant_id else None
     
     async def revoke_refresh_token(
         self,
@@ -304,7 +289,9 @@ class AuthService:
             RolePermission,
             Permission.id == RolePermission.permission_id
         ).where(
-            RolePermission.role_id.in_(role_ids)
+            RolePermission.role_id.in_(role_ids),
+            RolePermission.is_active == True,
+            RolePermission.is_deleted == False
         ).distinct()
         
         result = await db.execute(query)
@@ -321,7 +308,7 @@ class AuthService:
         new_password: str
     ) -> bool:
         """Change user password."""
-        user = await self.user_crud.get(db, user_id)
+        user = await user_crud.get(db, user_id)
         if not user:
             return False
         
@@ -350,7 +337,7 @@ class AuthService:
         new_password: str
     ) -> bool:
         """Reset user password (admin function)."""
-        user = await self.user_crud.get(db, user_id)
+        user = await user_crud.get(db, user_id)
         if not user:
             return False
         
@@ -373,9 +360,9 @@ class AuthService:
         db: AsyncSession,
         user_id: str
     ):        
-        user = await self.user_crud.get(db, user_id)
+        user = await user_crud.get(db, user_id)
         if not user:
-            None
+            return None
         tenants = []
         for tenant_id in user.tenant_ids:
             result = await db.execute(select(TenantMaster).where(TenantMaster.tenant_id == tenant_id, TenantMaster.is_deleted == False))
@@ -398,6 +385,4 @@ class AuthService:
         return tenant_user
 
 
-# Global auth service instance
 auth_service = AuthService()
-staff_crud  = CRUDService(StaffProfile)

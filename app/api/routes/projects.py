@@ -1,37 +1,27 @@
-"""
-Project management API routes.
-"""
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
-from app.api.schemas import (
+from app.schemas import (
     PaginatedResponse,
     PaginationParams,
-    SuccessResponse
-)
-from app.schemas.project_schemas import (
+    SuccessResponse,
     ProjectCreate,
     ProjectUpdate,
     ProjectResponse,
-    UpdateProjectMember
+    UpdateProjectMember,
+    ProjectMemberResponse, 
+    CreateProjectMember
 )
-from app.models.tenant import Project
 from app.db.base import get_db_session
-from app.schemas.project_schemas import ProjectMemberResponse, CreateProjectMember
-from app.services.crud import CRUDService
-from app.events.publisher import EventType, publish_event
 from app.core.logging_config import get_logger
-from app.services.projects import ProjectService
-from app.services.team import TeamService
+from app.services import project_service, team_service, notify
 from app.utils.rbac_middleware import require_permissions
+from app.services.crud import staff_crud, project_crud
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/projects", tags=["Project Management"])
 
-project_crud = CRUDService(Project)
-project_service = ProjectService()
-team_service = TeamService()
 
 @router.get("", response_model=PaginatedResponse)
 @require_permissions(["project:view"])
@@ -45,50 +35,13 @@ async def list_projects(
 ):
     """List all projects with filtering."""
     
-    filters = {}
-    if status:
-        filters["status"] = status
-    if priority:
-        filters["priority"] = priority
-    
-    total = await project_crud.count(db, filters=filters)
-    
-    projects = await project_crud.get_multi(
+    project_responses, total = await project_service.get_project_list(
         db,
-        skip=pagination.skip,
-        limit=pagination.limit,
-        filters=filters
+        pagination=pagination,
+        status=status,
+        priority=priority,
+        search=search
     )
-    
-    project_responses = []
-    for project in projects:
-        project_responses.append(ProjectResponse(
-            id=project.id,
-            name=project.name,
-            code=project.code,
-            description=project.description,
-            status=project.status,
-            priority=project.priority,
-            project_type=project.project_type,
-            start_date=project.start_date,
-            end_date=project.end_date,
-            budget=project.budget,
-            currency=project.currency,
-            parent_project_id=project.parent_project_id,
-            client_id=project.client_id,
-            project_manager_id=project.project_manager_id,
-            actual_start_date=project.actual_start_date,
-            actual_end_date=project.actual_end_date,
-            cost_estimate=project.cost_estimate,
-            actual_cost=project.actual_cost,
-            progress_percentage=project.progress_percentage,
-            is_template=project.is_template,
-            created_at=project.created_at,
-            updated_at=project.updated_at,
-            manager_name=None,
-            workflow_id=project.workflow_id,
-        ))
-    
     return PaginatedResponse.create(
         items=project_responses,
         total=total,
@@ -107,25 +60,30 @@ async def create_project(
     """Create a new project."""
     tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
-    print('creating project')
+    
     project = await project_service.create_project(
         db,
         data=project_data,
         user_id=user_id
     )
+    staff = await staff_crud.get(db, project.project_manager_id)
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(user_id),
+            'title': f"New project {project.name}",
+            'message': f"You have created a new project named {project.name}.",
+            }
+        )
     
-    # Publish event
-    await publish_event(
-        event_type=EventType.PROJECT_CREATED,
-        aggregate_type="project",
-        aggregate_id=str(project.id),
-        payload={
-            "name": project.name,
-            "code": project.code,
-            "project_manager_id": str(project.project_manager_id),
-            "created_by": user_id
-        }
-    )
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(staff.user_id),
+            'title': f"New project {project.name}",
+            'message': f"You are assigned to a new project named {project.name} as a project manager.",
+            }
+        )
     
     logger.info(f"Project created: {project.id}")
     
@@ -136,7 +94,6 @@ async def create_project(
         description=project.description,
         status=project.status,
         priority=project.priority,
-        project_type=project.project_type,
         start_date=project.start_date,
         end_date=project.end_date,
         budget=project.budget,
@@ -164,7 +121,7 @@ async def add_project_member(
 ):
     """Create a new project."""
     user_id = getattr(request.state, 'user_id', None)
-    
+    tenant_id = getattr(request.state, 'tenant_id', None)
     member = await team_service.add_member(
         db,
         data=project_data,
@@ -172,7 +129,7 @@ async def add_project_member(
     )
     
     logger.info(f"Member added to Project: {member.id}")
-    
+    await notify.notify_project_member(db, member, tenant_id, user_id)
     return ProjectMemberResponse(
         id=member.id,
         staff_id=member.staff_id,
@@ -206,21 +163,17 @@ async def update_project(
 ):
     """Update a project."""
     user_id = getattr(request.state, 'user_id', None)
-    
+    tenant_id = getattr(request.state, 'tenant_id', None)
     updated_project = await project_service.update_project(db, project_id, user_id, project_data)
     
-    # Publish event
-    await publish_event(
-        event_type=EventType.PROJECT_UPDATED,
-        aggregate_type="project",
-        aggregate_id=str(updated_project.id),
-        payload={
-            "name": updated_project.name,
-            "status": updated_project.status,
-            "progress": updated_project.progress_percentage,
-            "updated_by": user_id
-        }
-    )
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(user_id),
+            'title': f"Project updated: {updated_project.name}",
+            'message': f"You have updated the project named {updated_project.name}.",
+            }
+        )
     
     logger.info(f"Project updated: {updated_project.id}")
     
@@ -231,7 +184,6 @@ async def update_project(
         description=updated_project.description,
         status=updated_project.status,
         priority=updated_project.priority,
-        project_type=updated_project.project_type,
         start_date=updated_project.start_date,
         end_date=updated_project.end_date,
         budget=updated_project.budget,
@@ -259,32 +211,28 @@ async def delete_project(
 ):
     """Soft delete a project."""
     user_id = getattr(request.state, 'user_id', None)
+    tenant_id = getattr(request.state, 'tenant_id', None)
     project = await project_service.delete_project(db, project_id, user_id)
-    # Publish event
-    await publish_event(
-        event_type=EventType.PROJECT_DELETED,
-        aggregate_type="project",
-        aggregate_id=str(project_id),
-        payload={
-            "name": project.name,
-            "deleted_by": user_id
-        }
-    )
-    
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(user_id),
+            'title': f"Project deleted: {project.name}",
+            'message': f"You have deleted the project named {project.name}.",
+            }
+        )
     logger.info(f"Project deleted: {project_id}")
     
     return SuccessResponse(message="Project deleted successfully")
 
 @router.get("/{project_id}/members")
-@require_permissions(["project:view"])
+@require_permissions(["project:view-members"])
 async def get_project_members(
     request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get project members."""
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    
     members = await team_service.get_project_members(db, project_id)
     return members
 
@@ -297,12 +245,16 @@ async def remove_project_member(
 ):
     """Remove a project member."""
     user_id = getattr(request.state, 'user_id', None)
-    await team_service.remove_member(db, member_id, user_id)
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    member = await team_service.remove_member(db, member_id, user_id)
+
+    await notify.notify_project_member(db, member, tenant_id, user_id, is_removed=True)
+    
     return SuccessResponse(message="Member removed successfully")
 
 @router.put("/member/{member_id}", response_model=ProjectMemberResponse)
 @require_permissions(["project:manage-members"])
-async def remove_project_member(
+async def update_project_member(
     request: Request,
     member_id: UUID,
     data: UpdateProjectMember,
@@ -310,5 +262,27 @@ async def remove_project_member(
 ):
     """Remove a project member."""
     user_id = getattr(request.state, 'user_id', None)
-    return await team_service.update_member(db, member_id, data, user_id) 
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    member = await team_service.update_member(db, member_id, data, user_id) 
+    project = await project_crud.get(db, member.project_id)
+    staff = await staff_crud.get(db, member.staff_id)
+    staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(user_id),
+            'title': f"Project member updated in project {project.name}",
+            'message': f"You have updated {staff.first_name} {staff.last_name}'s role to {member.role} in project {project.name}."
+            }
+        )
+    
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(staff.user_id),
+            'title': f"Project member updated in project {project.name}",
+            'message': f"Your role has been updated to {member.role} in project {project.name} by {staff_by.first_name} {staff_by.last_name}"
+            }
+        )
+    return member
 

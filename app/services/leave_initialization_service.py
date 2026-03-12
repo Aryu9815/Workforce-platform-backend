@@ -1,14 +1,10 @@
-# app/services/leave_initialization_service.py
-
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import List
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from decimal import Decimal
-
-from app.models.tenant import LeaveType
-from app.models.tenant.staff import StaffLeaveBalance, StaffProfile
+from app.models.tenant import StaffLeaveBalance, StaffProfile , LeaveType
 
 
 class LeaveInitializationService:
@@ -36,8 +32,7 @@ class LeaveInitializationService:
         Allocation handled strictly by accrual engine.
         """
 
-        # year = join_date.year
-        current_year = datetime.utcnow().year
+        current_year = datetime.now(timezone.utc).year
         year = max(join_date.year, current_year)
 
         # Fetch active paid leave types
@@ -147,3 +142,5 @@ class LeaveInitializationService:
                     updated_by=created_by,
                 )
             )
+
+leave_initialization_service = LeaveInitializationService()

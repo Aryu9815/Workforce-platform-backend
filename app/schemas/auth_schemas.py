@@ -1,17 +1,15 @@
 """
 Pydantic schemas for API request/response validation.
 """
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any, Union
-from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
-from enum import Enum
-from pydantic import EmailStr, field_validator
+from typing import Optional, List, Dict, Any
+from pydantic import Field
+from pydantic import field_validator
 from app.utils.schema_uitls import NormalizedEmailStr
-
-class BaseSchema(BaseModel):
-    """Base schema with common configuration."""
-    model_config = ConfigDict(from_attributes=True)
+from app.schemas.base_schema import BaseSchema
+from app.schemas.validators import (
+    validate_name_field,
+    validate_phone_number
+)
 
 
 class TokenResponse(BaseSchema):
@@ -39,6 +37,18 @@ class RegisterRequest(BaseSchema):
     last_name: str = Field(..., min_length=1, max_length=100)
     phone: Optional[str] = None
 
+    @field_validator("first_name", "last_name")
+    def validate_names(cls, value, info):
+        return validate_name_field(
+            value,
+            max_length=100,
+            field=info.field_name,
+            only_letters=True,
+        )
+
+    @field_validator("phone")
+    def validate_phone(cls, value):
+        return validate_phone_number(value, is_optional=True)
 
 class RefreshTokenRequest(BaseSchema):
     """Refresh token request schema."""

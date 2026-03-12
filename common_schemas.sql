@@ -61,3 +61,36 @@ CREATE TABLE refresh_tokens (
     is_deleted BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE
 );
+
+
+CREATE TABLE IF NOT EXISTS public.notification_jobs
+(
+    id uuid NOT NULL,
+    notification_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    channel text COLLATE pg_catalog."default" NOT NULL,
+    payload jsonb NOT NULL,
+    status text COLLATE pg_catalog."default" DEFAULT 'pending'::text,
+    attempts integer DEFAULT 0,
+    created_at timestamp without time zone DEFAULT now(),
+    updated_at timestamp without time zone,
+    is_deleted boolean DEFAULT false,
+    is_active boolean DEFAULT true,
+    CONSTRAINT notification_jobs_pkey PRIMARY KEY (id)
+)
+
+
+CREATE TABLE IF NOT EXISTS public.push_subscriptions
+(
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    endpoint text COLLATE pg_catalog."default" NOT NULL,
+    p256dh text COLLATE pg_catalog."default" NOT NULL,
+    auth text COLLATE pg_catalog."default" NOT NULL,
+    created_at timestamp without time zone DEFAULT now(),
+    updated_at timestamp without time zone,
+    is_active boolean DEFAULT true,
+    is_deleted boolean DEFAULT false,
+    CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id)
+)

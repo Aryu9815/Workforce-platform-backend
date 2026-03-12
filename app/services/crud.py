@@ -4,11 +4,14 @@ Reusable CRUD service layer for database operations.
 from typing import TypeVar, Generic, Type, List, Optional, Dict, Any, Union
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, and_, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func, or_
 from pydantic import BaseModel
 import logging
 from datetime import datetime, timezone
+from sqlalchemy import asc, desc
+
+from app.models.tenant.task import TaskAudit, TaskLabel
+
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +93,64 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         
         result = await db.execute(query)
         return result.scalar_one_or_none()  
+    
+    def _apply_filter(self, query:str, filters:Optional[Dict[str, Any]] = None):
+        if filters:
+            for key, value in filters.items():
+                if hasattr(self.model, key):
+                    query = query.where(getattr(self.model, key) == value)        
+        return query
+    
+    def _apply_extra_condition(self, query:str, extra_conditions:Optional[List[Any]] = None):
+        if extra_conditions:
+            for condition in extra_conditions:
+                query = query.where(condition)
+        return query
+    
+    def _apply_search(
+        self, 
+        query: str,
+        search_fields: Optional[List[str]] = [],
+        search_values: Optional[List[str]] = []
+    ):
+        if search_fields and search_values:
+            or_conditions = []
+
+            for search_field, search_value in zip(search_fields, search_values):
+                if hasattr(self.model, search_field):
+                    or_conditions.append(
+                        getattr(self.model, search_field).ilike(f"%{search_value}%")
+                    )
+
+            if or_conditions:
+                query = query.where(or_(*or_conditions))
+
+        return query
+
+    def _apply_ordering(self, query, order_by: Optional[str] = None):
+        if order_by:
+            direction = asc
+            field = order_by
+
+            if order_by.startswith("-"):
+                direction = desc
+                field = order_by[1:]
+
+            if hasattr(self.model, field):
+                query = query.order_by(direction(getattr(self.model, field)))
+
+        elif hasattr(self.model, 'created_at'):
+            query = query.order_by(self.model.created_at.desc())
+        return query
+    
     async def get_multi(
         self,
         db: AsyncSession,
         *,
         skip: int = 0,
         limit: int = 20,
-         
+        search_fields: Optional[List[str]] = [],
+        search_values: Optional[List[str]] = [],
         include_deleted: bool = False,
         include_inactive: bool = False,
         order_by: Optional[str] = None,
@@ -104,24 +158,22 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         extra_conditions: Optional[List[Any]] = None,
     ) -> List[ModelType]:
         """Get multiple records with pagination."""
+
         query = select(self.model)
         query = self._apply_soft_delete_filter(query, include_deleted)
         query = self._apply_is_active_filter(query, include_inactive)
         
         # Apply additional filters
-        if filters:
-            for key, value in filters.items():
-                if hasattr(self.model, key):
-                    query = query.where(getattr(self.model, key) == value)
+        query = self._apply_filter(query, filters)
+
         # Apply extra conditions (like date range)
-        if extra_conditions:
-            for condition in extra_conditions:
-                query = query.where(condition)
+        query = self._apply_extra_condition(query, extra_conditions)
+
+        # Apply search 
+        query = self._apply_search(query, search_fields, search_values)
+            
         # Apply ordering
-        if order_by and hasattr(self.model, order_by):
-            query = query.order_by(getattr(self.model, order_by))
-        elif hasattr(self.model, 'created_at'):
-            query = query.order_by(self.model.created_at.desc())
+        query = self._apply_ordering(query, order_by)
         
         # Apply pagination
         if limit > -1:
@@ -398,3 +450,78 @@ class CRUDService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         result = await db.execute(query)
         return result.scalars().all()
+
+
+from app.models.tenant import (
+    StaffProfile, Designation, Department, TenantUserRole, Project, Notifications,
+    Role, Permission, RolePermission, ProjectMember, Task, TaskAssignee, WorkflowState,
+    WorkflowTransitions, AssetCategory, AssetAssignment, Asset, AssetType, 
+    AttendanceRecord, LeaveType, LeaveRequest, ReimbursementClaim, ReimbursementItem, ExpenseCategory,
+    Sprint, TenantUser, StaffLeaveBalance, Shift, Holiday, LeaveAccrualLog, TaskWorkSession,
+    TaskComment, Workflow, TransitionsRules
+)
+from app.models.common import TenantMaster, NotificationJobs, User
+
+# staff
+staff_crud = CRUDService(StaffProfile)
+department_crud = CRUDService(Department)
+designation_crud = CRUDService(Designation)
+
+# tenant
+tenant_master_crud = CRUDService(TenantMaster)
+
+# user
+tenant_user_crud = CRUDService(TenantUser)
+user_crud = CRUDService(User)
+
+# project
+project_crud = CRUDService(Project)
+project_member_crud = CRUDService(ProjectMember)
+
+# notification
+notification_crud = CRUDService(Notifications)
+notification_jobs_crud = CRUDService(NotificationJobs)
+
+# role
+role_crud = CRUDService(Role)
+tenant_user_role_crud = CRUDService(TenantUserRole)
+permission_crud = CRUDService(Permission)
+role_permission_crud = CRUDService(RolePermission)
+
+# task
+task_crud = CRUDService(Task)
+task_assignee_crud = CRUDService(TaskAssignee)
+task_work_session_crud = CRUDService(TaskWorkSession)
+task_comment_crud = CRUDService(TaskComment)
+
+# workflow
+workflow_state_crud = CRUDService(WorkflowState)
+workflow_transition_crud = CRUDService(WorkflowTransitions)
+workflow_crud = CRUDService(Workflow)
+transitions_rules_crud = CRUDService(TransitionsRules)
+
+#asset
+asset_category_crud = CRUDService(AssetCategory)
+asset_assignment_crud = CRUDService(AssetAssignment)
+asset_crud = CRUDService(Asset)
+asset_type_crud = CRUDService(AssetType)
+
+# attendance
+attendance_crud = CRUDService(AttendanceRecord)
+leave_crud = CRUDService(LeaveRequest)
+leave_type_crud = CRUDService(LeaveType)
+staff_leave_balance_crud = CRUDService(StaffLeaveBalance)
+shift_crud = CRUDService(Shift)
+holiday_crud = CRUDService(Holiday)
+leave_accrual_log_crud = CRUDService(LeaveAccrualLog)
+
+# reimbursement
+claim_crud = CRUDService(ReimbursementClaim)
+reimbursement_item_crud = CRUDService(ReimbursementItem)
+expense_category_crud = CRUDService(ExpenseCategory)
+
+# sprint
+sprint_crud = CRUDService(Sprint)
+
+task_label_crud = CRUDService(TaskLabel)
+task_audit_crud = CRUDService(TaskAudit)

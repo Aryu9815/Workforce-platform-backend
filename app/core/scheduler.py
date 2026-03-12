@@ -1,17 +1,15 @@
 from sqlalchemy import select
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
-
 from app.db.db_connection import get_common_session_maker
 from app.db.tenant_connection import get_tenant_session
 from app.db.base import set_tenant_context, clear_tenant_context
-from app.services.leave import LeaveService
-from app.models.common.tenant_master import TenantMaster   # ← your tenant table model
+from app.services.leave import leave_service
+from app.models.common import TenantMaster  
 
 
 
 scheduler = AsyncIOScheduler()
-leave_service = LeaveService()
 
 
 async def monthly_accrual_job():

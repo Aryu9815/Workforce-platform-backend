@@ -11,6 +11,11 @@ from app.api.routes.sprint import router as sprint_router
 from app.api.routes.permission_role import router as permission_role_router
 from app.api.routes.roles import router as role_router
 from app.api.routes.permissions import router as permission_router
+from app.api.routes.notifications import router as notifications_router
+from app.api.routes.task_work_routes import router as task_work_router
+from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.ai_routes import router as ai_router
+from app.api.routes.task_label import router as task_label_router
 
 __all__ = [
     "auth_router",
@@ -18,12 +23,16 @@ __all__ = [
     "projects_router",
     "tasks_router",
     "attendance_router",
-    "inventory_router",
     "reimbursements_router",
     "workflow_router",
     "assets_router",
     "permission_role_router",
     "sprint_router",
     "permission_router",
-    "role_router"
+    "role_router",
+    "notifications_router",
+    "task_work_router",
+    "dashboard_router",
+    "ai_router",
+    "task_label_router",
 ]

@@ -1,19 +1,20 @@
+from datetime import timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.tenant import Sprint, Task, WorkflowState, Project
-from app.schemas.sprint_schemas import SprintCreate, SprintEnd, SprintResponse, SprintUpdate
-from app.services.crud import CRUDService
-from app.services.task import TaskService 
+from app.models.tenant import Sprint, Task
+from app.schemas import SprintCreate, SprintEnd, SprintResponse, SprintUpdate
+from app.services.crud import (
+    sprint_crud, task_crud, workflow_state_crud, project_crud
+)
+from app.services.task import task_service 
+from sqlalchemy import select
+from app.core.constants import SPRINT_NOT_FOUND
 
 class SprintService:
 
     def __init__(self):
-        self.sprint_crud = CRUDService(Sprint)
-        self.task_crud = CRUDService(Task)
-        self.task_service = TaskService()
-        self.workflow_state_crud = CRUDService(WorkflowState)
-        self.project_crud = CRUDService(Project)
-
+        """Future implementation"""
+        pass
 
     async def create_sprint(
         self,
@@ -25,7 +26,7 @@ class SprintService:
         Create a new project, assign creator as manager,
         and auto-create a default workflow.
         """
-        sprint = await self.sprint_crud.create(
+        sprint = await sprint_crud.create(
             db,
             obj_in=data.model_dump(),
             user_id=user_id
@@ -42,14 +43,14 @@ class SprintService:
         """
         Update project details (allowed only for project managers).
         """
-        sprint = await self.sprint_crud.get(db, sprint_id)
+        sprint = await sprint_crud.get(db, sprint_id)
 
         if not sprint:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Sprint not found"
+                detail=SPRINT_NOT_FOUND
             )
-        updated_sprint = await self.sprint_crud.update(
+        updated_sprint = await sprint_crud.update(
             db,
             db_obj=sprint,
             updated_by=user_id,
@@ -67,12 +68,12 @@ class SprintService:
         """
         Soft-delete a project (manager only).
         """
-        sprint = await self.sprint_crud.get(db, sprint_id)
+        sprint = await sprint_crud.get(db, sprint_id)
         if not sprint:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sprint not found")
-        tasks = await self.task_crud.get_by_fields(db, fields={"sprint_id": sprint_id})
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SPRINT_NOT_FOUND)
+        tasks = await task_crud.get_by_fields(db, fields={"sprint_id": sprint_id})
         for task in tasks:
-            await self.task_service.delete_task(db, task.id, user_id)
+            await task_service.delete_task(db, task.id, user_id)
         return sprint
 
 
@@ -82,12 +83,12 @@ class SprintService:
         sprint_id: str
     ) -> SprintResponse:
    
-        sprint = await self.sprint_crud.get(db, sprint_id)
+        sprint = await sprint_crud.get(db, sprint_id)
         
         if not sprint:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="sprint not found"
+                detail=SPRINT_NOT_FOUND
             )
         
         return SprintResponse(
@@ -114,17 +115,17 @@ class SprintService:
         """
         Soft-delete a project (manager only).
         """
-        sprint = await self.sprint_crud.get(db, sprint_id)
-        if not sprint:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="sprint not found")
+        end_sprint = await sprint_crud.get(db, sprint_id)
+        if not end_sprint:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=SPRINT_NOT_FOUND)
         open_issues_options = {
             "backlog": self.move_open_issues_to_backlog,
             "next_sprint": self.move_open_issues_to_next_sprint,
             "new_sprint": self.move_open_issues_to_new_sprint
         }
-        project = await self.project_crud.get(db, sprint.project_id)
-        tasks = await self.task_crud.get_by_fields(db, fields={"sprint_id": sprint_id})
-        final_state_ids = await self.workflow_state_crud.get_by_fields(
+        project = await project_crud.get(db, end_sprint.project_id)
+        tasks = await task_crud.get_by_fields(db, fields={"sprint_id": sprint_id})
+        final_state_ids = await workflow_state_crud.get_by_fields(
             db, 
             fields={
                 "is_final": True,
@@ -141,13 +142,47 @@ class SprintService:
             next_sprint_id=end_sprint_data.next_sprint,
             new_sprint_data=end_sprint_data.new_sprint
         )
-        await self.sprint_crud.update(
+        await sprint_crud.update(
             db,
-            db_obj=sprint,
+            db_obj=end_sprint,
             obj_in={"status": "completed"},
             updated_by=user_id,
         )
-        return sprint
+        result = await db.execute(
+            select(Sprint)
+            .filter(
+                Sprint.project_id == end_sprint.project_id,
+                Sprint.sprint_number > end_sprint.sprint_number,
+                Sprint.status.not_in([
+                        "cancelled",
+                        "completed",
+                        "active"
+                    ])
+            )
+            .order_by(Sprint.sprint_number.asc())
+        )
+        sprints = result.scalars().all()
+        if len(sprints) < 2:
+            await sprint_crud.create(
+                db,
+                obj_in={
+                    "name": "Sprint " + str(end_sprint.sprint_number + 2),
+                    "project_id": end_sprint.project_id,
+                    "start_date": end_sprint.end_date + timedelta(days=1),
+                    "end_date": end_sprint.end_date + timedelta(days=14),
+                    "sprint_number": end_sprint.sprint_number + 2,
+                },
+                user_id=user_id
+            )
+        for sprint in sprints:
+            if (end_sprint.sprint_number + 1) == sprint.sprint_number:
+                await sprint_crud.update(
+                    db,
+                    db_obj=sprint,
+                    obj_in={"status": "active"},
+                    updated_by=user_id,
+                )
+        return end_sprint
     
     async def move_open_issues_to_backlog(
         self,
@@ -159,7 +194,7 @@ class SprintService:
     ):
         for task in tasks:
             if str(task.workflow_state_id) != str(final_state_id):
-                await self.task_crud.update(
+                await task_crud.update(
                     db,
                     db_obj=task,
                     obj_in={"sprint_id": None},
@@ -178,7 +213,7 @@ class SprintService:
         next_sprint_id = kwargs.get("next_sprint_id")
         for task in tasks:
             if str(task.workflow_state_id) != str(final_state_id):
-                await self.task_crud.update(
+                await task_crud.update(
                     db,
                     db_obj=task,
                     obj_in={"sprint_id": next_sprint_id},
@@ -198,10 +233,12 @@ class SprintService:
         new_sprint = await self.create_sprint(db, user_id, new_sprint_data)
         for task in tasks:
             if str(task.workflow_state_id) != str(final_state_id):
-                await self.task_crud.update(
+                await task_crud.update(
                     db,
                     db_obj=task,
                     obj_in={"sprint_id": new_sprint.id},
                     updated_by=user_id,
                 )
         return new_sprint
+
+sprint_service = SprintService()

@@ -1,36 +1,32 @@
-"""
-Reimbursement management API routes.
-"""
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
-from app.models.tenant.staff import StaffProfile
-from app.schemas.reimbursement import (ReimbursementClaimCreate,
+from datetime import datetime, timezone
+from app.models.tenant import Task, Project
+from app.schemas import (
+    ReimbursementClaimCreate,
     ReimbursementClaimUpdate,
     ReimbursementClaimResponse,
-    ReimbursementItemCreate,
-    ReimbursementItemResponse,)
-from app.api.schemas import (
-    
+    ReimbursementItemResponse,
     PaginatedResponse,
     PaginationParams,
     SuccessResponse
 )
-from app.models.tenant import ReimbursementClaim, ReimbursementItem, ExpenseCategory
 from app.db.base import get_db_session
-from app.services.crud import CRUDService
-from app.events.publisher import EventType, publish_event
+from app.services.crud import (
+    staff_crud,
+    claim_crud,
+    reimbursement_item_crud as item_crud,
+    expense_category_crud as category_crud
+)
 from app.core.logging_config import get_logger
+from app.services import notify
+from app.utils.rbac_middleware import require_permissions
+from app.core.constants import CLAIM_NOT_FOUND
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/reimbursements", tags=["Reimbursement Management"])
-
-claim_crud = CRUDService(ReimbursementClaim)
-item_crud = CRUDService(ReimbursementItem)
-category_crud = CRUDService(ExpenseCategory)
-staff_crud = CRUDService(StaffProfile)
 
 
 def generate_claim_number() -> str:
@@ -39,6 +35,7 @@ def generate_claim_number() -> str:
 
 
 @router.get("/claims", response_model=PaginatedResponse)
+@require_permissions(["reimbursement:view", "reimbursement:view:all"])
 async def list_reimbursement_claims(
     request: Request,
     pagination: PaginationParams = Depends(),
@@ -48,9 +45,9 @@ async def list_reimbursement_claims(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List reimbursement claims with filtering."""
-    
+    permissions = getattr(request.state, "permissions", [])
     filters = {}
-    if staff_id:
+    if staff_id and "reimbursement:view:all" not in permissions:
         filters["staff_id"] = staff_id
     if status:
         filters["status"] = status
@@ -112,7 +109,6 @@ async def list_reimbursement_claims(
             payment_reference=claim.payment_reference,
             created_at=claim.created_at,
             updated_at=claim.updated_at,
-            # staff_name=None,  # TODO: Fetch staff name
             staff_name=staff.first_name + " " + staff.last_name if staff else None,
             items=item_responses
         ))
@@ -126,6 +122,7 @@ async def list_reimbursement_claims(
 
 
 @router.post("/claims", response_model=ReimbursementClaimResponse, status_code=status.HTTP_201_CREATED)
+@require_permissions(["reimbursement:create"])
 async def create_reimbursement_claim(
     request: Request,
     claim_data: ReimbursementClaimCreate,
@@ -197,6 +194,7 @@ async def create_reimbursement_claim(
 
 
 @router.get("/claims/{claim_id}", response_model=ReimbursementClaimResponse)
+@require_permissions(["reimbursement:view"])
 async def get_reimbursement_claim(
     request: Request,
     claim_id: UUID,
@@ -209,7 +207,7 @@ async def get_reimbursement_claim(
     if not claim:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reimbursement claim not found"
+            detail=CLAIM_NOT_FOUND
         )
     
     # Get items
@@ -261,19 +259,21 @@ async def get_reimbursement_claim(
 
 
 @router.post("/claims/{claim_id}/submit", response_model=ReimbursementClaimResponse)
+@require_permissions(["reimbursement:create"])
 async def submit_reimbursement_claim(
     request: Request,
     claim_id: UUID,
     db: AsyncSession = Depends(get_db_session)
 ):
     """Submit a reimbursement claim for approval."""
-    
+    user_id = getattr(request.state, 'user_id', None)
+    tenant_id = getattr(request.state, 'tenant_id', None)
     claim = await claim_crud.get(db, claim_id)
     
     if not claim:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reimbursement claim not found"
+            detail=CLAIM_NOT_FOUND
         )
     
     if claim.status != "draft":
@@ -283,26 +283,20 @@ async def submit_reimbursement_claim(
         )
     
     claim.status = "submitted"
-    claim.submitted_at = datetime.utcnow()
-    current_user_id = getattr(request.state, "user_id", None)
-    claim.updated_by = str(current_user_id) if current_user_id else None
+    claim.submitted_at = datetime.now(timezone.utc)
+    claim.updated_by = str(user_id) if user_id else None
     await db.flush()
     await db.commit()
     await db.refresh(claim)
 
-    # Publish event
-    await publish_event(
-        event_type=EventType.REIMBURSEMENT_SUBMITTED,
-        aggregate_type="reimbursement",
-        aggregate_id=str(claim.id),
-        payload={
-            "claim_number": claim.claim_number,
-            "staff_id": str(claim.staff_id),
-            "total_amount": float(claim.total_amount),
-            "currency": claim.currency,
-            "updated_by":str(current_user_id) if current_user_id else None,
-        }
-    )
+    await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':user_id,
+            'title': f"Reimbursement claim {claim.claim_number} submitted",
+            'message': f"Your reimbursement claim {claim.claim_number} has been submitted.",
+            }
+        )
     
     logger.info(f"Reimbursement claim submitted: {claim.id}")
     
@@ -328,8 +322,21 @@ async def submit_reimbursement_claim(
         items=[]
     )
 
+def _check_claim(claim):
+    if not claim:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=CLAIM_NOT_FOUND
+        )
+    
+    if claim.status not in ["submitted", "draft"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Claim already {claim.status}"
+        )
 
 @router.post("/claims/{claim_id}/approve", response_model=ReimbursementClaimResponse)
+@require_permissions(["reimbursement:approve"])
 async def approve_reimbursement_claim(
     request: Request,
     claim_id: UUID,
@@ -338,48 +345,60 @@ async def approve_reimbursement_claim(
 ):
     """Approve or reject a reimbursement claim."""
     user_id = getattr(request.state, 'user_id', None)
-    
+    tenant_id = getattr(request.state, 'tenant_id', None)
     claim = await claim_crud.get(db, claim_id)
     
-    if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reimbursement claim not found"
-        )
-    
-    if claim.status not in ["submitted", "draft"]:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Claim already {claim.status}"
-        )
+    _check_claim(claim)
     
     claim.status = approval_data.status
     claim.approved_by = user_id
-    claim.approved_at = datetime.utcnow()
+    claim.approved_at = datetime.now(timezone.utc)
     claim.approval_notes = approval_data.approval_notes
-    current_user_id = getattr(request.state, "user_id", None)
-    claim.updated_by = str(current_user_id) if current_user_id else None
+    claim.updated_by = str(user_id) if user_id else None
+    items = await item_crud.get_by_fields(
+        db,
+        fields={"claim_id": claim.id}
+    )
+
+    for item in items:
+        
+        models = [
+            (Project, item.project_id or claim.project_id),
+            (Task, item.task_id or claim.task_id)
+        ]
+
+        for model, obj_id in models:
+            if not obj_id:
+                continue
+
+            obj = await db.get(model, obj_id)
+            if obj:
+                obj.actual_cost = (obj.actual_cost or 0) + item.amount
+            
     await db.flush()
     await db.commit()
     await db.refresh(claim)
     
     
-    # Publish event
-    if approval_data.status == "approved":
-        await publish_event(
-            event_type=EventType.REIMBURSEMENT_APPROVED,
-            aggregate_type="reimbursement",
-            aggregate_id=str(claim.id),
-            payload={
-                "claim_number": claim.claim_number,
-                "staff_id": str(claim.staff_id),
-                "approved_by": user_id,
-                "amount": float(claim.total_amount),
-            "updated_by":str(current_user_id) if current_user_id else None,
-
+    await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':user_id,
+            'title': f"Reimbursement claim {claim.claim_number} {claim.status}",
+            'message': f"You have {claim.status} the reimbursement claim {claim.claim_number}.",
             }
         )
-    
+    staff = await staff_crud.get(db, claim.staff_id)
+    staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
+
+    await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(staff.user_id),
+            'title': f"Reimbursement claim {claim.claim_number} {claim.status}",
+            'message': f"Your reimbursement claim {claim.claim_number} has been {claim.status} by {staff_by.first_name} {staff_by.last_name}.",
+            }
+        )
     logger.info(f"Reimbursement claim {claim_id} {approval_data.status}")
     
     return ReimbursementClaimResponse(
@@ -406,6 +425,7 @@ async def approve_reimbursement_claim(
 
 
 @router.post("/claims/{claim_id}/pay", response_model=ReimbursementClaimResponse)
+@require_permissions(["reimbursement:paid"])
 async def mark_reimbursement_paid(
     request: Request,
     claim_id: UUID,
@@ -414,12 +434,14 @@ async def mark_reimbursement_paid(
 ):
     """Mark a reimbursement claim as paid."""
     
+    user_id = getattr(request.state, "user_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
     claim = await claim_crud.get(db, claim_id)
     
     if not claim:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reimbursement claim not found"
+            detail=CLAIM_NOT_FOUND
         )
     
     if claim.status != "approved":
@@ -429,29 +451,32 @@ async def mark_reimbursement_paid(
         )
     
     claim.status = "paid"
-    claim.paid_at = datetime.utcnow()
+    claim.paid_at = datetime.now(timezone.utc)
     claim.payment_reference = payment_reference
-    current_user_id = getattr(request.state, "user_id", None)
-    claim.updated_by = str(current_user_id) if current_user_id else None
+    claim.updated_by = str(user_id) if user_id else None
     await db.flush()
     await db.commit()
     await db.refresh(claim)
     
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.REIMBURSEMENT_PAID,
-        aggregate_type="reimbursement",
-        aggregate_id=str(claim.id),
-        payload={
-            "claim_number": claim.claim_number,
-            "staff_id": str(claim.staff_id),
-            "amount": float(claim.total_amount),
-            "payment_reference": payment_reference,
-            "updated_by":str(current_user_id) if current_user_id else None,
+    await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':user_id,
+            'title': f"Reimbursement claim {claim.claim_number} {claim.status}",
+            'message': f"You have {claim.status} the reimbursement claim {claim.claim_number}.",
+            }
+        )
+    staff = await staff_crud.get(db, claim.staff_id)
+    staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
 
-        }
-    )
+    await notify.create_notification(
+        data={
+            'tenant_id':str(tenant_id),
+            'user_id':str(staff.user_id),
+            'title': f"Reimbursement claim {claim.claim_number} {claim.status}",
+            'message': f"Your reimbursement claim {claim.claim_number} has been {claim.status} by {staff_by.first_name} {staff_by.last_name}.",
+            }
+        )
     
     logger.info(f"Reimbursement claim paid: {claim.id}")
     
@@ -483,6 +508,7 @@ async def mark_reimbursement_paid(
 # ============================================
 
 @router.get("/categories", response_model=List[dict])
+@require_permissions(["reimbursement:create"])
 async def list_expense_categories(
     request: Request,
     db: AsyncSession = Depends(get_db_session)
@@ -506,3 +532,52 @@ async def list_expense_categories(
         }
         for cat in categories
     ]
+
+
+@router.delete("/claims/{claim_id}", response_model=SuccessResponse)
+async def delete_reimbursement_claim(
+    request: Request,
+    claim_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Delete a reimbursement claim (only allowed for draft claims)."""
+
+    user_id = getattr(request.state, "user_id", None)
+
+    claim = await claim_crud.get(db, claim_id)
+
+    if not claim:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=CLAIM_NOT_FOUND
+        )
+
+    # ERP rule: only draft claims can be deleted
+    if claim.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only draft claims can be deleted"
+        )
+
+    # Soft delete items first
+    await item_crud.delete_by_field(
+        db,
+        field="claim_id",
+        value=claim_id,
+        user_id=str(user_id) if user_id else None
+    )
+
+    # Soft delete claim
+    await claim_crud.delete(
+        db,
+        id=claim_id,
+        user_id=str(user_id) if user_id else None
+    )
+
+    await db.commit()
+
+    logger.info(f"Reimbursement claim deleted: {claim_id}")
+
+    return SuccessResponse(
+        message="Reimbursement claim deleted successfully"
+    )

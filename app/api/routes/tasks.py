@@ -1,17 +1,12 @@
-"""
-Task management API routes.
-"""
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
-
-from app.api.schemas import (
+from app.models.tenant.task import Task
+from app.schemas import (
     PaginatedResponse,
     PaginationParams,
-    SuccessResponse
-)
-from app.schemas.task_schemas import (
+    SuccessResponse,
     TaskCreate,
     TaskResponse,
     TaskUpdate,
@@ -19,22 +14,18 @@ from app.schemas.task_schemas import (
     CommentResponse,
     CommentUpdate
 )
-from app.models.tenant import Task, TaskAssignee
+from sqlalchemy import select
 from app.db.base import get_db_session
-from app.services.crud import CRUDService
-from app.events.publisher import EventType, publish_event
+from app.services.crud import task_crud
 from app.core.logging_config import get_logger
-from app.services.task import TaskService
+from app.services import task_service, notify
 from app.utils.rbac_middleware import require_permissions
+
 logger = get_logger(__name__)
 router = APIRouter(prefix="/tasks", tags=["Task Management"])
 
-task_crud = CRUDService(Task)
-task_assignee_crud = CRUDService(TaskAssignee)
-task_service = TaskService()
 
-
-
+from app.models.tenant.task import TaskLabel
 @router.get("", response_model=PaginatedResponse)
 @require_permissions(["task:view"])
 async def list_tasks(
@@ -58,22 +49,31 @@ async def list_tasks(
     filters["sprint_id"] = sprint_id
     
     total = await task_crud.count(db, filters=filters)
-    
-    tasks = await task_crud.get_multi(
-        db,
-        skip=pagination.skip,
-        limit=pagination.limit,
-        filters=filters
-    )
+    result = await db.execute(
+            select(Task, TaskLabel)
+            .outerjoin(TaskLabel, TaskLabel.id == Task.task_label_id)
+            .where(Task.is_deleted == False)
+            .offset(pagination.skip)
+            .limit(pagination.limit)
+        )
+
+    rows = result.all()
     
     task_responses = []
-    for task in tasks:
+    for task , label  in rows:
         task_responses.append(TaskResponse(
             id=task.id,
+            task_label_id=task.task_label_id,
+            task_label={
+                "id": label.id,
+                "label": label.label,
+                "description": label.description,
+                "color": label.color
+            } if label else None,
+
             title=task.title,
             description=task.description,
             priority=task.priority,
-            task_type=task.task_type,
             estimated_hours=task.estimated_hours,
             estimated_cost=task.estimated_cost,
             start_date=task.start_date,
@@ -97,7 +97,6 @@ async def list_tasks(
             ticket_code=task.ticket_code,
             ticket_number=task.ticket_number
         ))
-    
     return PaginatedResponse.create(
         items=task_responses,
         total=total,
@@ -143,33 +142,19 @@ async def create_task(
     """Create a new task."""
     tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
-    
-    task = await task_service.create_task(
+    print("create task",user_id)
+    task, assignee = await task_service.create_task(
         db,
         user_id=user_id,
         data=task_data
     )
-     
-    # Publish event
-    await publish_event(
-        event_type=EventType.TASK_CREATED,
-        aggregate_type="task",
-        aggregate_id=str(task.id),
-        payload={
-            "title": task.title,
-            "project_id": str(task.project_id),
-            "created_by": user_id
-        }
-    )
-    
     logger.info(f"Task created: {task.id}")
-    
+    await notify.notify_task_assignment(db, task, assignee, tenant_id, user_id)
     return TaskResponse(
         id=task.id,
         title=task.title,
         description=task.description,
         priority=task.priority,
-        task_type=task.task_type,
         estimated_hours=task.estimated_hours,
         estimated_cost=task.estimated_cost,
         start_date=task.start_date,
@@ -189,6 +174,17 @@ async def create_task(
     )
 
 
+@router.get("/assigned/{staff_id}", response_model=List[TaskResponse])
+@require_permissions(["task:view"])
+async def get_assigned_tasks(
+    request: Request,
+    staff_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Get a specific task by ID."""
+    
+    return await task_service.get_assigned_tasks_for_staff(db, staff_id)
+
 @router.get("/{task_id}", response_model=TaskResponse)
 @require_permissions(["task:view"])
 async def get_task(
@@ -197,9 +193,9 @@ async def get_task(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific task by ID."""
+    task  = await task_service.get_task(db, task_id)
+    return task
     
-    return await task_service.get_task(db, task_id)
-
 
 @router.put("/{task_id}", response_model=TaskResponse)
 @require_permissions(["task:update"])
@@ -219,26 +215,14 @@ async def update_task(
         data=task_data
     )
     
-    # Publish event
-    await publish_event(
-        event_type=EventType.TASK_UPDATED,
-        aggregate_type="task",
-        aggregate_id=str(updated_task.id),
-        payload={
-            "title": updated_task.title,
-            "progress": updated_task.progress_percentage,
-            "updated_by": user_id
-        }
-    )
-    
     logger.info(f"Task updated: {updated_task.id}")
     
     return TaskResponse(
         id=updated_task.id,
         title=updated_task.title,
+    
         description=updated_task.description,
         priority=updated_task.priority,
-        task_type=updated_task.task_type,
         estimated_hours=updated_task.estimated_hours,
         estimated_cost=updated_task.estimated_cost,
         start_date=updated_task.start_date,
@@ -268,18 +252,7 @@ async def delete_task(
     """Soft delete a task."""
     user_id = getattr(request.state, 'user_id', None)
     
-    task = await task_service.delete_task(db, task_id, user_id)
-    
-    # Publish event
-    await publish_event(
-        event_type=EventType.TASK_DELETED,
-        aggregate_type="task",
-        aggregate_id=str(task_id),
-        payload={
-            "title": task.title,
-            "deleted_by": user_id
-        }
-    )
+    await task_service.delete_task(db, task_id, user_id)
     
     logger.info(f"Task deleted: {task_id}")
     
@@ -287,7 +260,7 @@ async def delete_task(
 
 
 @router.post("/{task_id}/comments", response_model=CommentResponse)
-@require_permissions(["task:comment"])
+@require_permissions(["comment:create"])
 async def add_comment(
     request: Request,
     comment_data: CommentCreate,
@@ -296,13 +269,21 @@ async def add_comment(
     
     """Add a comment to a task."""  
     user_id = getattr(request.state, 'user_id', None)
+    tenant_id = getattr(request.state, 'tenant_id', None)
     
-    comment = await task_service.add_task_comment(
+    comment, task = await task_service.add_task_comment(
         db,
         data=comment_data,
         user_id=user_id
     )
-
+    _ = await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"Comment - {task.ticket_code}-{task.ticket_number}",
+            'message': comment.content
+        }
+    )
     return CommentResponse(
         id=comment.id,
         task_id=comment.task_id,
@@ -318,7 +299,7 @@ async def add_comment(
 
 
 @router.get("/{task_id}/comments", response_model=List[CommentResponse])
-@require_permissions(["task:view"])
+@require_permissions(["comment:view"])
 async def get_comments(
     request: Request,
     task_id: UUID,
@@ -328,7 +309,7 @@ async def get_comments(
     return await task_service.get_comments(db, task_id)
 
 @router.delete("/{task_id}/comments/{comment_id}", response_model=SuccessResponse)
-@require_permissions(["task:comment"])
+@require_permissions(["comment:delete"])
 async def delete_comment(
     request: Request,
     comment_id: UUID,
@@ -343,7 +324,7 @@ async def delete_comment(
 
 
 @router.put("/{task_id}/comments/{comment_id}", response_model=CommentResponse)
-@require_permissions(["task:comment"])
+@require_permissions(["comment:update"])
 async def update_comment(
     request: Request,
     comment_id: UUID,
@@ -353,3 +334,12 @@ async def update_comment(
     user_id = getattr(request.state, 'user_id', None)
     
     return await task_service.update_comment(db, comment_id, user_id, comment_data)
+
+@router.get("/{sprint_id}/get_tickets")
+@require_permissions(["task:create"])
+async def get_tickets(
+    request: Request,
+    sprint_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    return await task_service.get_ticket(db, sprint_id)

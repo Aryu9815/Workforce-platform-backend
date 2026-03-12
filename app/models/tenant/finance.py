@@ -1,17 +1,11 @@
 import uuid
-from datetime import datetime
-from typing import Optional, List
 from sqlalchemy import (
-    Column, String, Text, DateTime, Date, Time, Boolean, Integer, 
-    Numeric, ForeignKey, Index, UniqueConstraint, CheckConstraint,
-    ARRAY, JSON
+    Column, String, Text, DateTime, Date, Boolean, 
+    Numeric, ForeignKey
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
-from sqlalchemy.orm import relationship, declared_attr
-from sqlalchemy.sql import func
-
-from app.db.base import Base
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.db_connection import TenantScopedMixin, TenantBase
+from app.core.constants import SET_NULL, STAFF_PROFILE_ID, PROJECT_ID, TASK_ID
 
 
 class ExpenseCategory(TenantBase, TenantScopedMixin):
@@ -22,7 +16,7 @@ class ExpenseCategory(TenantBase, TenantScopedMixin):
     name = Column(String(100), nullable=False)
     code = Column(String(20), nullable=True)
     description = Column(Text, nullable=True)
-    parent_id = Column(UUID(as_uuid=True), ForeignKey("expense_categories.id", ondelete="SET NULL"), nullable=True)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("expense_categories.id", ondelete=SET_NULL), nullable=True)
     requires_receipt = Column(Boolean, default=True)
     max_amount = Column(Numeric(12, 2), nullable=True)
     tax_deductible = Column(Boolean, default=False)
@@ -34,9 +28,9 @@ class ReimbursementClaim(TenantBase, TenantScopedMixin):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     claim_number = Column(String(50), unique=True, nullable=False)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
-    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey(PROJECT_ID, ondelete=SET_NULL), nullable=True)
+    task_id = Column(UUID(as_uuid=True), ForeignKey(TASK_ID, ondelete=SET_NULL), nullable=True)
     claim_date = Column(Date, nullable=False)
     expense_date_start = Column(Date, nullable=True)
     expense_date_end = Column(Date, nullable=True)
@@ -71,10 +65,10 @@ class ReimbursementItem(TenantBase, TenantScopedMixin):
     tax_amount = Column(Numeric(12, 2), default=0)
     merchant_name = Column(String(255), nullable=True)
     merchant_location = Column(String(255), nullable=True)
-    receipt_file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), nullable=True)
+    receipt_file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete=SET_NULL), nullable=True)
     is_billable = Column(Boolean, default=False)
-    client_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
-    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    client_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete=SET_NULL), nullable=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey(PROJECT_ID, ondelete=SET_NULL), nullable=True)
+    task_id = Column(UUID(as_uuid=True), ForeignKey(TASK_ID, ondelete=SET_NULL), nullable=True)
     custom_fields = Column(JSONB, default=dict)
 

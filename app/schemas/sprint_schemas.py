@@ -1,24 +1,23 @@
 
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any, Union
+from datetime import date
+from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from enum import Enum
+from pydantic import Field, field_validator
+from app.schemas.base_schema import BaseSchema, TimestampSchema
+from app.schemas.validators import (
+    validate_date_ymd,
+    validate_name_field,
+    validate_optional_str,
+    validate_positive_number,
+)
+
 
 class IssuseStatus(str, Enum):
     """Task priority enum."""
     BACKLOG = "backlog"
     NEXT_SPRINT = "next_sprint"
     NEW_SPRINT = "new_sprint"
-
-class BaseSchema(BaseModel):
-    """Base schema with common configuration."""
-    model_config = ConfigDict(from_attributes=True)
-
-class TimestampSchema(BaseSchema):
-    """Schema with timestamp fields."""
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
 class SprintStatus(str, Enum):
     """Task priority enum."""
@@ -37,6 +36,35 @@ class SprintBase(BaseSchema):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
 
+    @field_validator("name")
+    def validate_name(cls, value):
+        return validate_name_field(value, max_length=500, field="name")
+
+    @field_validator("goal")
+    def validate_goal(cls, value):
+        return validate_optional_str(
+            value,
+            max_length=1000,
+            field="goal",
+        )
+
+    @field_validator("capacity")
+    def validate_capacity(cls, value):
+        return validate_positive_number(
+            value,
+            field="capacity",
+            is_optional=True,
+            strictly_positive=True,
+        )
+
+    @field_validator("start_date", "end_date", mode="before")
+    def validate_dates(cls, value, info):
+        return validate_date_ymd(
+            value,
+            field=info.field_name,
+            is_optional=True,
+        )
+
 
 class SprintCreate(SprintBase):
     """Task creation schema."""
@@ -52,11 +80,51 @@ class SprintUpdate(BaseSchema):
     end_date: Optional[date] = None
     capacity: Optional[int] = None
 
+    @field_validator("name")
+    def validate_name(cls, value):
+        return validate_name_field(
+            value,
+            max_length=500,
+            field="name",
+            is_optional=True,
+        )
 
-class SprintResponse(SprintBase, TimestampSchema):
+    @field_validator("goal")
+    def validate_goal(cls, value):
+        return validate_optional_str(
+            value,
+            max_length=1000,
+            field="goal",
+        )
+
+    @field_validator("capacity")
+    def validate_capacity(cls, value):
+        return validate_positive_number(
+            value,
+            field="capacity",
+            is_optional=True,
+            strictly_positive=True,
+        )
+
+    @field_validator("start_date", "end_date", mode="before")
+    def validate_dates(cls, value, info):
+        return validate_date_ymd(
+            value,
+            field=info.field_name,
+            is_optional=True,
+        )
+
+class SprintResponse(BaseSchema, TimestampSchema):
     """Task response schema."""
     id: UUID
     project_id: UUID
+    name: str
+    goal: Optional[str] = None
+    sprint_number: Optional[int] = None
+    status: SprintStatus = SprintStatus.PLANNED
+    capacity: Optional[int] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
     created_by: UUID
     updated_by: Optional[UUID] = None
 

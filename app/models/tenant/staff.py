@@ -2,20 +2,13 @@
 SQLAlchemy models for all database entities.
 """
 import uuid
-from datetime import datetime
-from typing import Optional, List
 from sqlalchemy import (
-    Column, String, Text, DateTime, Date, Time, Boolean, Integer, 
-    Numeric, ForeignKey, Index, UniqueConstraint, CheckConstraint,
-    ARRAY, JSON
+    Column, String, Text, Date, Boolean, Integer, 
+    Numeric, ForeignKey, UniqueConstraint, 
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
-from sqlalchemy.orm import relationship, declared_attr
-from sqlalchemy.sql import func
-
-from app.db.base import Base
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.db_connection import TenantScopedMixin, TenantBase
-
+from app.core.constants import DEPARTMENT_ID, STAFF_PROFILE_ID, DESIGNATION_ID, SET_NULL
 
 class Department(TenantBase, TenantScopedMixin):
     """Department model."""
@@ -25,8 +18,8 @@ class Department(TenantBase, TenantScopedMixin):
     name = Column(String(100), nullable=False)
     code = Column(String(20), nullable=True)
     description = Column(Text, nullable=True)
-    parent_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
-    head_id = Column(UUID(as_uuid=True), nullable=True)  # Will be FK to staff_profiles
+    parent_id = Column(UUID(as_uuid=True), ForeignKey(DEPARTMENT_ID, ondelete=SET_NULL), nullable=True)
+    head_id = Column(UUID(as_uuid=True), nullable=True)
 
 
 class Designation(TenantBase, TenantScopedMixin):
@@ -36,7 +29,7 @@ class Designation(TenantBase, TenantScopedMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(100), nullable=False)
     level = Column(Integer, nullable=True)
-    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
+    department_id = Column(UUID(as_uuid=True), ForeignKey(DEPARTMENT_ID, ondelete=SET_NULL), nullable=True)
     description = Column(Text, nullable=True)
 
 
@@ -51,9 +44,9 @@ class StaffProfile(TenantBase, TenantScopedMixin):
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False)
     phone = Column(String(20), nullable=True)
-    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id", ondelete="RESTRICT"), nullable=False)
-    designation_id = Column(UUID(as_uuid=True), ForeignKey("designations.id", ondelete="RESTRICT"), nullable=False)
-    reporting_manager_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="SET NULL"), nullable=True)
+    department_id = Column(UUID(as_uuid=True), ForeignKey(DEPARTMENT_ID, ondelete="RESTRICT"), nullable=False)
+    designation_id = Column(UUID(as_uuid=True), ForeignKey(DESIGNATION_ID, ondelete="RESTRICT"), nullable=False)
+    reporting_manager_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete=SET_NULL), nullable=True)
     employment_type = Column(String(20), nullable=False)  # full_time, contractor, vendor
     join_date = Column(Date, nullable=False)
     exit_date = Column(Date, nullable=True)
@@ -64,12 +57,12 @@ class StaffProfile(TenantBase, TenantScopedMixin):
     emergency_contact = Column(JSONB, nullable=True)
     documents = Column(JSONB, default=list)
     custom_fields = Column(JSONB, default=dict)
-    shift_id = Column(UUID(as_uuid=True), ForeignKey("shifts.id", ondelete="SET NULL"), nullable=True)
+    shift_id = Column(UUID(as_uuid=True), ForeignKey("shifts.id", ondelete=SET_NULL), nullable=True)
 class StaffLeaveBalance(TenantBase, TenantScopedMixin):
     __tablename__ = "staff_leave_balances"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete="CASCADE"), nullable=False)
     leave_type_id = Column(UUID(as_uuid=True), ForeignKey("leave_types.id", ondelete="CASCADE"), nullable=False)
 
     year = Column(Integer, nullable=False)
@@ -88,7 +81,7 @@ class StaffAssignment(TenantBase, TenantScopedMixin):
     __tablename__ = "staff_assignments"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey("staff_profiles.id", ondelete="CASCADE"), nullable=False)
+    staff_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete="CASCADE"), nullable=False)
     project_id = Column(UUID(as_uuid=True), nullable=False)  # Will be FK to projects
     role = Column(String(100), nullable=True)
     allocation_percentage = Column(Integer, default=100)

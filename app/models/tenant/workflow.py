@@ -58,7 +58,6 @@ class WorkflowTransitions(TenantBase, TenantScopedMixin):
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     request_approval = Column(Boolean, default=False)
-    approval_flow_id = Column(UUID(as_uuid=True), ForeignKey("approval_flows.id", ondelete="CASCADE"), nullable=True)
     auto_transition = Column(Boolean, default=False)
     condition_rules = Column(JSONB, nullable=True)
 

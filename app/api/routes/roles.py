@@ -1,36 +1,42 @@
-"""
-Role management API routes.
-ERP-grade RBAC module.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 from uuid import UUID
-
 from app.db.base import get_db_session
-from app.services.crud import CRUDService
+from app.schemas import RoleCreate, RoleUpdate
 from app.utils.rbac_middleware import require_permissions
 from app.core.logging_config import get_logger
-
-from app.models.tenant.rbac_models import (
+from app.models.tenant import (
     Role,
-    Permission,
     RolePermission
 )
+from app.services import notify
+from app.services.crud import role_crud, role_permission_crud
+from app.core.constants import ROLE_NOT_FOUND
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/roles", tags=["Role Management"])
 
-role_crud = CRUDService(Role)
-permission_crud = CRUDService(Permission)
-role_permission_crud = CRUDService(RolePermission)
-
-
 # ============================================================
 # LIST ROLES
 # ============================================================
+
+async def _check_role_exists(db, role_id):
+    role = await role_crud.get(db, role_id)
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ROLE_NOT_FOUND)
+    return role
+
+async def _check_existing_default_roles(db):
+    default_role = await role_crud.get_by_fields(
+        db,
+        fields={"is_default": True, "is_deleted": False}
+    )
+
+    if default_role:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only one role set as default")
+
 
 @router.get("", response_model=List[dict])
 # @require_permissions(["role:view"])
@@ -64,15 +70,14 @@ async def list_roles(
 # GET ROLE DETAIL
 # ============================================================
 @router.get("/{role_id}", response_model=dict)
+# @require_permissions(["role:view"])
 async def get_role(
     request: Request,
     role_id: UUID,
     db: AsyncSession = Depends(get_db_session)
 ):
-    role = await role_crud.get(db, role_id)
-
-    if not role or role.is_deleted:
-        raise HTTPException(404, "Role not found")
+    
+    role = await _check_role_exists(db, role_id)
 
     # Get assigned permission IDs only
     stmt = select(RolePermission.permission_id).where(
@@ -101,55 +106,39 @@ async def get_role(
 # ============================================================
 
 @router.post("", response_model=dict, status_code=201)
-# @require_permissions(["role:create"])
+@require_permissions(["role:create"])
 async def create_role(
     request: Request,
-    data: dict,
+    data: RoleCreate,
     db: AsyncSession = Depends(get_db_session)
 ):
     user_id = getattr(request.state, "user_id", None)
-    if not user_id:
-        raise HTTPException(401, "Unauthorized")
+    tenant_id = getattr(request.state, "tenant_id", None)
 
     existing = await role_crud.get_by_fields(
         db,
-        fields={"name": data["name"], "is_deleted": False}
+        fields={"name": data.name, "is_deleted": False}
     )
-
     if existing:
-        raise HTTPException(409, "Role name already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Role name already exists")
+    
+    if data.is_default:
+        await _check_existing_default_roles(db)
 
     role = await role_crud.create(
         db,
-        obj_in={
-            "name": data["name"],
-            "description": data.get("description"),
-            "created_by": str(user_id),
-            "updated_by": str(user_id)
-        }
+        obj_in=data.model_dump(),
+        user_id=str(user_id)
     )
 
-    # Attach permissions if provided
-    permissions = data.get("permission_ids", [])
-
-    for perm_id in permissions:
-        perm = await permission_crud.get(db, perm_id)
-        if not perm:
-            raise HTTPException(404, f"Permission {perm_id} not found")
-
-        await role_permission_crud.create(
-            db,
-            obj_in={
-                "role_id": role.id,
-                "permission_id": perm_id,
-                "created_by": str(user_id),
-                "updated_by": str(user_id)
+    await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"New role {role.name}",
+            'message': f"You have added a new role named {role.name}",
             }
         )
-
-    await db.commit()
-    await db.refresh(role)
-
     return {
         "id": str(role.id),
         "name": role.name,
@@ -162,36 +151,31 @@ async def create_role(
 # ============================================================
 
 @router.put("/{role_id}", response_model=dict)
+@require_permissions(["role:update"])
 async def update_role(
     request: Request,
     role_id: UUID,
-    data: dict,
+    data: RoleUpdate,
     db: AsyncSession = Depends(get_db_session)
 ):
-    user_id = getattr(request.state, "common_id", None)
-    if not user_id:
-        raise HTTPException(401, "Unauthorized")
+    user_id = getattr(request.state, "user_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
 
-    role = await role_crud.get(db, role_id)
-
-    if not role or role.is_deleted:
-        raise HTTPException(404, "Role not found")
+    role = await _check_role_exists(db, role_id)
+    if data.is_default:
+        await _check_existing_default_roles(db)
 
     # Update basic fields if provided
-    if "name" in data:
-        role.name = data["name"]
+    update_data = data.model_dump(exclude_unset=True, exclude={"permissions"})
 
-    if "description" in data:
-        role.description = data["description"]
-
-    if "is_default" in data:
-        role.is_default = data["is_default"]
+    for field, value in update_data.items():
+        setattr(role, field, value)
 
     role.updated_by = str(user_id)
 
     # Only sync permissions if sent
-    if "permissions" in data:
-        new_permissions = set(UUID(p) for p in data["permissions"])
+    if data.permissions:
+        new_permissions = set(UUID(p) for p in data.permissions)
 
         stmt = select(RolePermission).where(
             RolePermission.role_id == role_id,
@@ -223,7 +207,14 @@ async def update_role(
 
     await db.commit()
     await db.refresh(role)
-
+    await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"Updated role {role.name}",
+            'message': f"You have updated a role named {role.name}",
+            }
+        )
     return {
         "id": str(role.id),
         "name": role.name,
@@ -238,22 +229,29 @@ async def update_role(
 # ============================================================
 
 @router.delete("/{role_id}", status_code=204)
-# @require_permissions(["role:delete"])
+@require_permissions(["role:delete"])
 async def delete_role(
     request: Request,
     role_id: UUID,
     db: AsyncSession = Depends(get_db_session)
 ):
-    user_id = getattr(request.state, "common_id", None)
+    user_id = getattr(request.state, "user_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
 
     role = await role_crud.get(db, role_id)
 
     if not role or role.is_deleted:
-        raise HTTPException(404, "Role not found")
+        raise HTTPException(404, ROLE_NOT_FOUND)
 
     role.is_deleted = True
     role.updated_by = str(user_id)
 
     await db.commit()
-
-    return
+    await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"Deleted role {role.name}",   
+            'message': f"You have deleted a role named {role.name}",
+            }
+        )

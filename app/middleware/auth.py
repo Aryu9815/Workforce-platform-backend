@@ -73,7 +73,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
         
         # Set user and tenant in request state
-        request.state.common_id = token_data.user_id
+        request.state.user_id = token_data.user_id
         request.state.common_id = token_data.common_id
         request.state.user_email = token_data.email
         request.state.tenant_id = token_data.tenant_id
@@ -121,14 +121,6 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
         # Check X-Tenant-ID header
         if not tenant_id:
             tenant_id = request.headers.get("X-Tenant-ID")
-        
-        # Check subdomain (e.g., tenant.example.com)
-        if not tenant_id:
-            host = request.headers.get("Host", "")
-            if "." in host:
-                subdomain = host.split(".")[0]
-                # TODO: Resolve tenant ID from subdomain
-                pass
         
         # Set tenant context
         if tenant_id:

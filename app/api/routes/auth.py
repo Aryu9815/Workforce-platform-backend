@@ -1,28 +1,24 @@
-"""
-Authentication API routes.
-"""
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-
-from app.api.schemas import (
+from typing import List
+from app.schemas import (
     UserResponse,
     TenantListResponse,
-    SuccessResponse
-)
-from app.schemas.auth_schemas import (
+    SuccessResponse,
+    TenantListResponse,
     LoginRequest,
     RegisterRequest,
     TokenResponse,
     RefreshTokenRequest,
     ChangePasswordRequest
 )
-from app.services.auth import auth_service , staff_crud
-
+from app.services import auth_service
+from app.services.crud import staff_crud, user_crud
 from app.db.base import get_db_session , get_common_db
 from app.core.config import settings
 from app.core.logging_config import get_logger
+from app.core.constants import AUTH_REQUIRED
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -50,10 +46,10 @@ async def login(
         )
     
     tenants = await auth_service.get_user_tenants(db, user.id)
-    if not len(tenants) > 0:
+    if len(tenants) <= 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="We couldn't find any firm linked to your account.Please contact support or your administrator to activate your access."
+            detail="We couldn't find any firm linked to your account. Please contact support or your administrator to activate your access."
         )
     multiple_tenants_found = True
     tenant = tenants[0]
@@ -179,7 +175,7 @@ async def change_password(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
+            detail=AUTH_REQUIRED
         )
     
     try:
@@ -212,22 +208,24 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get current authenticated user details."""
-    user_id = getattr(request.state, 'common_id', None)
+    common_user_id = getattr(request.state, 'common_id', None)
     
-    if not user_id:
+    if not common_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
+            detail=AUTH_REQUIRED
         )
     
-    user = await auth_service.user_crud.get(common_db, user_id)
+    user = await user_crud.get(common_db, common_user_id)
     
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    staff= await staff_crud.get_by_user_id(db, user_id)
+    tenant_user_id = getattr(request.state, 'user_id', None)
+
+    staff= await staff_crud.get_by_user_id(db, tenant_user_id)
     user_response = UserResponse(
         id=user.id,
         email=user.email,
@@ -278,11 +276,11 @@ async def switch_tenant(
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
+            detail=AUTH_REQUIRED
         )
     
     # Get user
-    user = await auth_service.user_crud.get(db, user_id)
+    user = await user_crud.get(db, user_id)
     
     if not user:
         raise HTTPException(

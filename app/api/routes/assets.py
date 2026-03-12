@@ -1,52 +1,36 @@
-"""
-Asset management API routes.
-ERP-grade asset tracking with assignment workflow.
-"""
-from sqlalchemy import select, desc
-import re
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
-from datetime import date
-
 from app.db.base import get_db_session
-from app.services.crud import CRUDService
-from app.core.logging_config import get_logger
-
-from app.models.tenant import (
-    AssetCategory,
-    AssetType,
-    Asset,
-    AssetAssignment,
-    StaffProfile,
+from app.services.crud import (
+    staff_crud,
+    asset_type_crud as type_crud,
+    asset_crud,
+    asset_assignment_crud as assignment_crud,
+    asset_category_crud as category_crud, 
 )
-
-from app.api.schemas import (
+from app.core.logging_config import get_logger
+from app.models.tenant import AssetType, Asset
+from app.schemas import (
     PaginatedResponse,
     PaginationParams,
     SuccessResponse,
-)
-from app.schemas.assets import (
     AssetCategoryCreate,
-    AssetCategoryUpdate,
+    AssetHistoryResponse,
     AssetTypeCreate,
-    AssetTypeUpdate,
     AssetCreate,
-    AssetUpdate,
     AssetAssignRequest,
-    AssetReturnRequest
+    AssetReturnRequest,
+    AssignmentHistoryItem
 )
 from app.utils.rbac_middleware import require_permissions
+from app.services import notify
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/assets", tags=["Asset Management"])
 
-category_crud = CRUDService(AssetCategory)
-type_crud = CRUDService(AssetType)
-asset_crud = CRUDService(Asset)
-assignment_crud = CRUDService(AssetAssignment)
-staff_crud = CRUDService(StaffProfile)
 
 # ============================================================
 # Asset Categories
@@ -79,6 +63,7 @@ async def create_asset_category(
     db: AsyncSession = Depends(get_db_session)
 ):
     user_id = getattr(request.state, "user_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
     if not user_id:
         raise HTTPException(401, "Unauthorized")
 
@@ -102,15 +87,20 @@ async def create_asset_category(
 
     await db.commit()
     await db.refresh(category)
-
+    await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"New category {category.name}",
+            'message': f"You have added a new asset category named {category.name}",
+            }
+        )
     return {
         "id": str(category.id),
         "name": category.name,
         "code": category.code,
         "description": category.description,
     }
-
-
 
 # ============================================================
 # Asset Types
@@ -150,6 +140,7 @@ async def create_asset_type(
     db: AsyncSession = Depends(get_db_session)
 ):
     user_id = getattr(request.state, "user_id", None)
+    tenant_id = getattr(request.state, "tenant_id", None)
     if not user_id:
         raise HTTPException(401, "Unauthorized")
     category = await category_crud.get(db, data.category_id)
@@ -166,7 +157,14 @@ async def create_asset_type(
     )
 
     await db.commit()
-
+    await notify.create_notification(
+        data={
+            'tenant_id':tenant_id,
+            'user_id':str(user_id),
+            'title': f"New type {asset_type.name}",
+            'message': f"You have added a new asset type {asset_type.name}",
+            }
+        )
     return {
         "id": str(asset_type.id),
         "name": asset_type.name,
@@ -224,36 +222,6 @@ async def list_assets(
     )
 
 
-async def generate_asset_tags(
-    db: AsyncSession,
-    asset_type: AssetType,
-    quantity: int
-):
-    prefix = asset_type.name[:3].upper()
-
-    # Get latest asset_tag for this type
-    stmt = (
-        select(Asset.asset_tag)
-        .where(Asset.asset_type_id == asset_type.id)
-        .order_by(desc(Asset.asset_tag))
-        .limit(1)
-    )
-
-    result = await db.execute(stmt)
-    last_asset_tag = result.scalar_one_or_none()
-
-    last_number = 0
-
-    if last_asset_tag:
-        match = re.search(r"(\d+)$", last_asset_tag)
-        if match:
-            last_number = int(match.group(1))
-
-    return [
-        f"{prefix}-{str(last_number + i).zfill(4)}"
-        for i in range(1, quantity + 1)
-    ]
-
 
 
 
@@ -266,59 +234,89 @@ async def create_asset(
 ):
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
-        raise HTTPException(401, "Unauthorized")
-
-    asset_type = await type_crud.get(db, data.asset_type_id)
-    if not asset_type:
-        raise HTTPException(404, "Asset type not found")
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     quantity = data.quantity or 1
 
-    # ERP Rules
-    
-    if asset_type.is_serialized:
-        if not data.serial_numbers:
-            raise HTTPException(400, "Serial numbers required")
+    async with db.begin():  # 🔥 single atomic transaction
 
-        if len(data.serial_numbers) != quantity:
-            raise HTTPException(400, "Serial count must match quantity")
-    if not asset_type.is_serialized and data.serial_numbers:
-        raise HTTPException(400, "Bulk asset must not have serial number")
-
-    asset_tags = await generate_asset_tags(
-        db,
-        asset_type,
-        quantity
-    )
-
-    created_assets = []
-
-    for i , tag in enumerate(asset_tags):
-        asset = Asset(
-            asset_type_id=data.asset_type_id,
-            asset_tag=tag,
-            serial_number=data.serial_numbers[i] ,
-            purchase_date=data.purchase_date,
-            purchase_price=data.purchase_price,
-            location=data.location,
-            notes=data.notes,
-            status="available",
-            created_by=str(user_id),
-            updated_by=str(user_id)
+        # 🔐 Lock asset type row (prevents race condition)
+        stmt = (
+            select(AssetType)
+            .where(AssetType.id == data.asset_type_id)
+            .with_for_update()
         )
 
-        db.add(asset)
-        created_assets.append(tag)
+        result = await db.execute(stmt)
+        asset_type = result.scalar_one_or_none()
 
-    await db.commit()
+        if not asset_type:
+            raise HTTPException(status_code=404, detail="Asset type not found")
+
+        if not asset_type.tag_prefix:
+            raise HTTPException(
+                status_code=400,
+                detail="Asset type tag_prefix not configured"
+            )
+
+        # ------------------------
+        # ERP VALIDATIONS
+        # ------------------------
+
+        if asset_type.is_serialized:
+            if not data.serial_numbers:
+                raise HTTPException(400, "Serial numbers required")
+
+            if len(data.serial_numbers) != quantity:
+                raise HTTPException(400, "Serial count must match quantity")
+
+        if not asset_type.is_serialized and data.serial_numbers:
+            raise HTTPException(400, "Bulk asset must not have serial number")
+
+        # ------------------------
+        # SAFE TAG GENERATION
+        # ------------------------
+
+        start_number = asset_type.next_tag_number
+        prefix = asset_type.tag_prefix
+
+        asset_tags = [
+            f"{prefix}-{str(start_number + i).zfill(5)}"
+            for i in range(quantity)
+        ]
+
+        # Increment counter safely
+        asset_type.next_tag_number += quantity
+
+        created_assets = []
+
+        for i, tag in enumerate(asset_tags):
+            asset = Asset(
+                asset_type_id=asset_type.id,
+                asset_tag=tag,
+                serial_number=(
+                    data.serial_numbers[i]
+                    if asset_type.is_serialized
+                    else None
+                ),
+                purchase_date=data.purchase_date,
+                purchase_price=data.purchase_price,
+                location=data.location,
+                notes=data.notes,
+                status="available",
+                created_by=str(user_id),
+                updated_by=str(user_id),
+            )
+
+            db.add(asset)
+            created_assets.append(tag)
+
+    # transaction auto commits here
 
     return {
         "message": f"{quantity} asset(s) created successfully",
         "asset_tags": created_assets
     }
-
-
-
 # ============================================================
 # Asset Assignment Workflow
 # ============================================================
@@ -332,18 +330,12 @@ async def assign_asset(
     db: AsyncSession = Depends(get_db_session)
 ):
     user_id = getattr(request.state, "user_id", None)
-    # if not user_id:
-    #     raise HTTPException(401, "Unauthorized")
     asset = await asset_crud.get(db, asset_id)
     if not asset:
         raise HTTPException(404, "Asset not found")
 
     if asset.status != "available":
         raise HTTPException(400, "Asset not available")
-
-    # asset_type = await type_crud.get(db, asset.asset_type_id)
-    # if not asset_type.is_serialized:
-    #     raise HTTPException(400, "Bulk asset cannot be individually assigned")
 
     staff = await staff_crud.get(db, data.staff_id)
     if not staff or not staff.is_active:
@@ -357,9 +349,8 @@ async def assign_asset(
         db,
         fields={"asset_id": asset_id, "is_active": True}
     )
-    # if active:
-        
-    #     raise HTTPException(400, f"Asset already assigned  { [act.staff_id for act in active]}")
+    if active:
+        raise HTTPException(400, f"Asset already assigned  { [act.staff_id for act in active]}")
 
     await assignment_crud.create(
         db,
@@ -410,6 +401,81 @@ async def return_asset(
 
     await db.commit()
     await db.refresh(assignment)
-
     return SuccessResponse(message="Asset returned successfully")
 
+@router.get("/{asset_id}/history", response_model=AssetHistoryResponse)
+@require_permissions(["asset:view"])
+async def get_asset_history(
+    request: Request,
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db_session),
+):
+
+    # 🔹 Get Asset
+    asset = await asset_crud.get(db, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    # 🔹 Get Type
+    asset_type = await type_crud.get(db, asset.asset_type_id)
+
+    # 🔹 Get Category
+    category = await category_crud.get(db, asset_type.category_id)
+
+    # 🔹 Get Assignments
+    assignments = await assignment_crud.get_multi(
+        db,
+        filters={"asset_id": asset.id} ,
+        include_inactive=True,
+        order_by="-assigned_date"
+    )
+
+    history_items = []
+    current_assignment = None
+
+    for a in assignments:
+        staff = await staff_crud.get(db, a.staff_id)
+
+        item = AssignmentHistoryItem(
+            id=a.id,
+            staff_id=a.staff_id,
+            staff_name=staff.first_name + " " + staff.last_name if staff else "Unknown",
+            assigned_date=a.assigned_date,
+            expected_return_date=a.expected_return_date,
+            returned_date=a.returned_date,
+            condition_on_assign=a.condition_on_assign,
+            condition_on_return=a.condition_on_return,
+            is_active=a.is_active,
+        )
+
+        history_items.append(item)
+
+        if a.is_active:
+            current_assignment = item
+
+    return AssetHistoryResponse(
+        id=asset.id,
+        asset_tag=asset.asset_tag,
+        serial_number=asset.serial_number,
+        status=asset.status,
+        location=asset.location,
+        purchase_date=asset.purchase_date,
+        purchase_price=float(asset.purchase_price) if asset.purchase_price else None,
+
+        asset_type={
+            "id": asset_type.id,
+            "name": asset_type.name,
+            "brand": asset_type.brand,
+            "model_number": asset_type.model_number,
+            "tag_prefix": asset_type.tag_prefix,
+        },
+        category={
+            "id": category.id,
+            "name": category.name,
+            "code": category.code,
+        },
+
+        total_assignments=len(history_items),
+        current_assignment=current_assignment,
+        assignment_history=history_items
+    )

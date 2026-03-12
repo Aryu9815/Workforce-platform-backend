@@ -19,6 +19,7 @@ class TenantMaster(CommonBase):
     contact_person = Column(String(255))
     email = Column(String(255), unique=True)
     phone = Column(String(20))
+    tenant_code = Column(String(10), unique=True)
     is_active = Column(Boolean, default=True)
     is_deleted = Column(Boolean, default=False)
     tenant_metadata = Column(JSON, default={})

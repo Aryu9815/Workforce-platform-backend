@@ -1,25 +1,20 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from uuid import uuid4
 from typing import List, Optional
-from app.models.tenant import Project, ProjectMember, Workflow, StaffProfile, Designation
-from app.services.workflow import WorkflowService
-from app.services.team import TeamService
-from app.schemas.project_schemas import ProjectCreate, CreateProjectMember, ProjectUpdate
-from app.services.crud import CRUDService
-from app.schemas.project_schemas import ProjectResponse
-from datetime import datetime, timezone
-
+from app.models.tenant import Project, ProjectMember, StaffProfile
+from app.services.workflow import workflow_service
+from app.services.team import team_service
+from app.schemas import ProjectCreate, CreateProjectMember, ProjectUpdate, ProjectResponse, PaginationParams
+from datetime import datetime, timedelta, timezone
+from app.services.crud import project_crud, staff_crud, sprint_crud
+from app.core.constants import PROJECT_NOT_FOUND
 
 class ProjectService:
 
     def __init__(self):
-        self.workflow_service = WorkflowService()
-        self.team_service = TeamService()
-        self.project_crud = CRUDService(Project)
-        self.staff_crud = CRUDService(StaffProfile)
-        self.project_member_crud = CRUDService(ProjectMember)
+        """Future implementation"""
+        pass
 
     async def create_project(
         self,
@@ -31,8 +26,9 @@ class ProjectService:
         Create a new project, assign creator as manager,
         and auto-create a default workflow.
         """
+        existing =None
         if data.code:
-            existing = await self.project_crud.get_by_field(
+            existing = await project_crud.get_by_field(
                 db,
                 field="code",
                 value=data.code
@@ -42,30 +38,46 @@ class ProjectService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Project with this code already exists"
             )
-        data.created_by = user_id
         # Create default workflow (Todo → In Progress → Review → Done)
-        workflow = await self.workflow_service.create_default_workflow(
+        workflow = await workflow_service.create_default_workflow(
             db=db,
             user_id=user_id
         )
         data.workflow_id = workflow.id
         # Create project
-        project = await self.project_crud.create(
+        project = await project_crud.create(
             db,
-            obj_in=data.model_dump()
+            obj_in=data.model_dump(),
+            user_id=user_id
         )
 
         member_data = CreateProjectMember(
             project_id=project.id,
             staff_id=data.project_manager_id,
-            role="project_manager"
+            role="Project Manager"
         )
         # Assign user as PROJECT MANAGER
-        await self.team_service.add_member(
+        await team_service.add_member(
             db=db,
             data=member_data,
             user_id=user_id
         )
+
+        # Assign create default sprint
+        for i in range(1, 4): # create first 3 sprints
+             await sprint_crud.create(
+                db,
+                obj_in={
+                    "name": f"Sprint {i}",
+                    "goal": f"This is sprint {i}.",
+                    "status": "active" if i == 1 else "planned",
+                    "project_id": project.id,
+                    "sprint_number": i,
+                    "start_date": (datetime.now(timezone.utc).date() + timedelta(days=(i-1)*14)),
+                    "end_date": (datetime.now(timezone.utc).date() + timedelta(days=i*14)),
+                },
+                user_id=user_id
+            )
 
         return project
 
@@ -80,17 +92,18 @@ class ProjectService:
         """
         Update project details (allowed only for project managers).
         """
-        project = await self.project_crud.get(db, project_id)
+        project = await project_crud.get(db, project_id)
     
         if not project:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found"
+                detail=PROJECT_NOT_FOUND
             )
-        updated_project = await self.project_crud.update(
+        updated_project = await project_crud.update(
             db,
             db_obj=project,
-            obj_in=data.model_dump(exclude_unset=True)
+            obj_in=data.model_dump(exclude_unset=True),
+            updated_by=user_id
         )
 
         await db.commit()
@@ -107,7 +120,7 @@ class ProjectService:
         """
         Soft-delete a project (manager only).
         """
-        project = await self.project_crud.delete(
+        project = await project_crud.delete(
             db,
             id=project_id,
             user_id=user_id,
@@ -117,10 +130,10 @@ class ProjectService:
         if not project:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found"
+                detail=PROJECT_NOT_FOUND
             )
-        await self.team_service.delete_project_members(db, project_id, user_id) # delete project members
-        await self.workflow_service.delete_workflow(db, project.workflow_id, user_id) # delete workflow
+        await team_service.delete_project_members(db, project_id, user_id) # delete project members
+        await workflow_service.delete_workflow(db, project.workflow_id, user_id) # delete workflow
         await db.commit()
         return project
     
@@ -145,15 +158,15 @@ class ProjectService:
         """
         Get a specific project by ID.
         """
-        project = await self.project_crud.get(db, project_id)
+        project = await project_crud.get(db, project_id)
     
         if not project:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Project not found"
+                detail=PROJECT_NOT_FOUND
             )
 
-        manager = await self.staff_crud.get(db, project.project_manager_id)
+        manager = await staff_crud.get(db, project.project_manager_id)
         result = await db.execute(
             select(
                 ProjectMember.id,
@@ -188,7 +201,6 @@ class ProjectService:
             description=project.description,
             status=project.status,
             priority=project.priority,
-            project_type=project.project_type,
             manager_name=f"{manager.first_name} {manager.last_name}",
             project_members=project_members,
             start_date=project.start_date,
@@ -209,3 +221,57 @@ class ProjectService:
             updated_at=project.updated_at
         )
 
+    async def get_project_list(self,
+        db: AsyncSession,
+        pagination: PaginationParams,
+        status: Optional[str] = None,
+        priority: Optional[str] = None,
+        search: Optional[str] = None
+    ):
+        filters = {}
+        if status:
+            filters["status"] = status
+        if priority:
+            filters["priority"] = priority
+        
+        total = await project_crud.count(db, filters=filters)
+        
+        projects = await project_crud.get_multi(
+            db,
+            skip=pagination.skip,
+            limit=pagination.limit,
+            filters=filters,
+            search_fields=['name', 'code'] if search else None,
+            search_values=[search, search] if search else None
+        )
+        
+        project_responses = []
+        for project in projects:
+            project_responses.append(ProjectResponse(
+                id=project.id,
+                name=project.name,
+                code=project.code,
+                description=project.description,
+                status=project.status,
+                priority=project.priority,
+                start_date=project.start_date,
+                end_date=project.end_date,
+                budget=project.budget,
+                currency=project.currency,
+                parent_project_id=project.parent_project_id,
+                client_id=project.client_id,
+                project_manager_id=project.project_manager_id,
+                actual_start_date=project.actual_start_date,
+                actual_end_date=project.actual_end_date,
+                cost_estimate=project.cost_estimate,
+                actual_cost=project.actual_cost,
+                progress_percentage=project.progress_percentage,
+                is_template=project.is_template,
+                created_at=project.created_at,
+                updated_at=project.updated_at,
+                manager_name=None,
+                workflow_id=project.workflow_id,
+            ))
+        return project_responses, total
+
+project_service = ProjectService()

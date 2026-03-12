@@ -1,10 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine ,  async_sessionmaker , AsyncEngine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import MetaData
 from app.core.config import settings
 from sqlalchemy import Column, Boolean,func,TIMESTAMP, String
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from typing import Optional, Tuple
 import asyncio
 from sqlalchemy import event
@@ -153,3 +152,4 @@ class TenantScopedMixin:
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(String(255),nullable=False)
     updated_by = Column(String(255))
+    audit_log = Column(JSONB, default=list)
