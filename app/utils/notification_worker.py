@@ -14,7 +14,7 @@ async def process_pending_jobs():
     print("Worker: Checking for pending notification jobs...")
     session_maker = await get_common_session_maker()
 
-    # STEP 1 — Fetch jobs in short transaction
+    # Fetch jobs in short transaction
     async with session_maker() as session:
         result = await session.execute(
             NotificationJobs.__table__.select()
@@ -22,9 +22,7 @@ async def process_pending_jobs():
         )
         jobs = result.fetchall()
 
-    # Transaction closed here
-
-    # STEP 2 — Process each job independently
+    # Process each job independently
     for job in jobs:
 
         try:

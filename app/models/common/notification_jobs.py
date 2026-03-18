@@ -1,19 +1,9 @@
-
-"""
-SQLAlchemy models for all database entities.
-"""
 import uuid
-from datetime import datetime
-from typing import Optional, List
 from sqlalchemy import (
-    Column, String, Text, DateTime, Date, Time, Boolean, Integer, 
-    Numeric, ForeignKey, Index, UniqueConstraint, CheckConstraint,
-    ARRAY, JSON
+    Column, String, Boolean, Integer, 
 )
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID, JSONB, INET
-from sqlalchemy.orm import relationship, declared_attr
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID, JSONB
 from sqlalchemy.sql import func
-
 from app.db.db_connection import CommonBase
 
 class NotificationJobs(CommonBase):

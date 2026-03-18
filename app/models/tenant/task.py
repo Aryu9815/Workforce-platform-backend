@@ -63,18 +63,6 @@ class TaskAssignee(TenantBase, TenantScopedMixin):
     allocation_percentage = Column(Integer, default=100)
     
 
-
-class TaskDependency(TenantBase, TenantScopedMixin):
-    """Task dependencies."""
-    __tablename__ = "task_dependencies"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    task_id = Column(UUID(as_uuid=True), ForeignKey(TASK_ID, ondelete="CASCADE"), nullable=False)
-    depends_on_task_id = Column(UUID(as_uuid=True), ForeignKey(TASK_ID, ondelete="CASCADE"), nullable=False)
-    dependency_type = Column(String(20), default="finish_to_start")
-    lag_days = Column(Integer, default=0)
-    
-
 class TaskComment(TenantBase, TenantScopedMixin):
     """Task comments."""
     __tablename__ = "task_comments"
@@ -86,40 +74,14 @@ class TaskComment(TenantBase, TenantScopedMixin):
     is_internal = Column(Boolean, default=False)
     parent_comment_id = Column(UUID(as_uuid=True), ForeignKey("task_comments.id", ondelete="CASCADE"), nullable=True)
 
-class TaskAttachments(TenantBase, TenantScopedMixin):
-    """Task comments."""
-    __tablename__ = "task_attachments"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    task_id = Column(UUID(as_uuid=True), ForeignKey(TASK_ID, ondelete="CASCADE"), nullable=False)
-    file_id = Column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
-    uploaded_by = Column(UUID(as_uuid=True), nullable=False)
-    description = Column(Text, nullable=False)
 
 class TaskAudit(TenantBase):
     __tablename__ = "task_audits"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-    task_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey(TASK_ID, ondelete="CASCADE"),
-        nullable=False,
-        index=True
-    )
-
-    action = Column(String(50), nullable=False)  
-    # CREATE / UPDATE / DELETE / STATUS_CHANGE / ASSIGNEE_CHANGE
-
+    task_id = Column(UUID(as_uuid=True),ForeignKey(TASK_ID, ondelete="CASCADE"),nullable=False,index=True)
+    action = Column(String(50), nullable=False)  # CREATE / UPDATE / DELETE / STATUS_CHANGE / ASSIGNEE_CHANGE
     field_name = Column(String(100), nullable=True)
-
     old_values = Column(JSONB, nullable=True)
     new_values = Column(JSONB, nullable=True)
-
     performed_by = Column(UUID(as_uuid=True), nullable=False)
-
-    created_at = Column(
-        TIMESTAMP(timezone=True),
-        server_default=func.now(),
-        nullable=False
-    )

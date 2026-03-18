@@ -18,6 +18,7 @@ from app.core.logging_config import get_logger
 from app.services import project_service, team_service, notify
 from app.utils.rbac_middleware import require_permissions
 from app.services.crud import staff_crud, project_crud
+from app.utils.db_utils import get_staff
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/projects", tags=["Project Management"])
@@ -66,8 +67,8 @@ async def create_project(
         data=project_data,
         user_id=user_id
     )
-    staff = await staff_crud.get(db, project.project_manager_id)
-    _ = await notify.create_notification(
+    staff = await get_staff(db, project.project_manager_id, tenant_id)
+    await notify.create_notification(
         data={
             'tenant_id':str(tenant_id),
             'user_id':str(user_id),
@@ -76,7 +77,7 @@ async def create_project(
             }
         )
     
-    _ = await notify.create_notification(
+    await notify.create_notification(
         data={
             'tenant_id':str(tenant_id),
             'user_id':str(staff.user_id),
@@ -150,7 +151,8 @@ async def get_project(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific project by ID."""
-    return await project_service.get_project(db, project_id)
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    return await project_service.get_project(db, project_id, tenant_id)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -265,7 +267,7 @@ async def update_project_member(
     tenant_id = getattr(request.state, 'tenant_id', None)
     member = await team_service.update_member(db, member_id, data, user_id) 
     project = await project_crud.get(db, member.project_id)
-    staff = await staff_crud.get(db, member.staff_id)
+    staff = await get_staff(db, member.staff_id, tenant_id)
     staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
     _ = await notify.create_notification(
         data={

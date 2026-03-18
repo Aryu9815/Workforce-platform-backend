@@ -1,11 +1,12 @@
+import json
 from sqlalchemy import select
 from app.core.security import hash_password
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 from app.models.common import User
-from app.models.tenant import Role, TenantUserRole, TenantUser, StaffProfile, Department, Designation
+from app.models.tenant import TenantUserRole, TenantUser, StaffProfile, Department, Designation
 from app.schemas import (
     PaginatedResponse,
     PaginationParams,
@@ -28,10 +29,13 @@ from app.services.crud import (
 from app.core.logging_config import get_logger
 from app.services import staff_service, notify, leave_initialization_service as leave_init_service
 from app.utils.rbac_middleware import require_permissions
-from app.core.constants import STAFF_NOT_FOUND
+from app.core.constants import STAFF_NOT_FOUND, IMAGE_DIR
 from app.api.routes.roles import _check_role_exists
-# from app.utils.cache_utils import cache_utils
-
+from app.utils.cache_utils import cache_utils
+from app.utils.db_utils import get_staff
+from app.utils.image_utils import save_image
+from fastapi.responses import FileResponse
+import os
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/staff", tags=["Staff Management"])
@@ -53,7 +57,8 @@ async def list_staff(
         pagination,
         department_id,
         status,
-        search
+        search,
+        tenant_id=getattr(request.state, 'tenant_id', None)
     )
     
     return PaginatedResponse.create(
@@ -117,7 +122,8 @@ async def _user_tenant_mapping(db, user_id, tenant_id):
 @require_permissions(["staff:create"])
 async def create_staff(
     request: Request,
-    staff_data: StaffCreate,
+    staff_data: str = Form(...),
+    profile_image: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db_session),
     common_db: AsyncSession = Depends(get_common_db)
 ):
@@ -125,6 +131,8 @@ async def create_staff(
     tenant_id = getattr(request.state, "tenant_id", None)
     user_id = getattr(request.state, "user_id", None)
 
+    staff_data_dict = json.loads(staff_data)
+    staff_data = StaffCreate.model_validate(staff_data_dict)
     async with db.begin():
 
         # Check if staff email already exists IN THIS TENANT
@@ -185,20 +193,25 @@ async def create_staff(
             db.add(tenant_user)
             await db.flush()
 
+        profile_image_path = None
+
+        if profile_image:
+            profile_image_path = await save_image(profile_image)
         # Create Staff Profile (Tenant Scoped)
         tenant = await tenant_master_crud.get_by_field(common_db, field="tenant_id", value=tenant_id)
         department = await department_crud.get(db, staff_data.department_id)
         emp_code = await staff_service.generate_employee_code(db, tenant.tenant_code, department.code)
         staff_data.employee_code = emp_code
-        staff_dict = staff_data.model_dump()
-        staff_dict.pop("created_by", None)
-        staff_dict.pop("updated_by", None)
+        staff_dict = staff_data.model_dump(
+           exclude={"created_by", "updated_by", "profile_image"}
+        )
         role_id=staff_dict.pop("role_id", None)
         staff = StaffProfile(
             **staff_dict,
             user_id=tenant_user.id,
             created_by=str(user_id),
             updated_by=str(user_id),
+            profile_image=profile_image_path
         )
         db.add(staff)
         await db.flush()
@@ -240,20 +253,19 @@ async def create_staff(
             join_date=staff.join_date,
             created_by=str(user_id),
         )
-    # -------------------------------------------------
-    # 4️⃣ Fetch Related Names
-    # -------------------------------------------------
+    
+    # Fetch Related Names
     department = await db.get(Department, staff.department_id)
     designation = await db.get(Designation, staff.designation_id)
-    
+    await cache_utils.delete_all_staff(tenant_id)
+    await cache_utils.get_or_set_all_staff_base_data(db, tenant_id)
     await notify.notify_staff(staff,department, designation, tenant_id, user_id)
-
-    print("created by and updated by user id:", user_id)
     return StaffResponse(
         id=staff.id,
         employee_code=staff.employee_code,
         first_name=staff.first_name,
         last_name=staff.last_name,
+        profile_image=staff.profile_image,
         email=staff.email,
         phone=staff.phone,
         department_id=staff.department_id,
@@ -284,10 +296,12 @@ async def create_staff(
 @require_permissions(["department:view"])
 async def list_departments(
     request: Request,
+    is_dropdown: bool = False,
     db: AsyncSession = Depends(get_db_session)
 ):
     """List all departments."""
-    return await staff_service.get_departments(db)
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    return await staff_service.get_departments(db, is_dropdown, tenant_id)
 
 
 @router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
@@ -309,7 +323,7 @@ async def create_department(
     await db.commit()
     await db.refresh(department)
     logger.info(f"Department created: {department.id}")
-    _ = await notify.create_notification(
+    await notify.create_notification(
         data={
             'tenant_id':tenant_id,
             'user_id':str(user_id),
@@ -338,28 +352,12 @@ async def create_department(
 @require_permissions(["designation:view"])
 async def list_designations(
     request: Request,
+    is_dropdown: bool = False,
     db: AsyncSession = Depends(get_db_session)
 ):
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    return await staff_service.get_designations(db, is_dropdown, tenant_id)
 
-    designations = await designation_crud.get_multi(
-        db,
-        filters={"is_active": True} , 
-        order_by="name"
-    )
-
-    return [
-        DesignationResponse(
-            id=d.id,
-            name=d.name,
-            level=d.level,
-            department_id=d.department_id,
-            description=d.description,
-            is_active=d.is_active,
-            created_at=d.created_at,
-            updated_at=d.updated_at
-        )
-        for d in designations
-    ]
 
 @router.post(
     "/designations",
@@ -496,42 +494,8 @@ async def get_staff(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get a specific staff member by ID."""
-    
-    staff = await staff_crud.get(db, staff_id)
-    if not staff:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=STAFF_NOT_FOUND
-        )
-    designation = await designation_crud.get(db, staff.designation_id)
-    department = await department_crud.get(db, staff.department_id)
-    role_id = await tenant_user_role_crud.get_by_field(db, field="user_id", value=staff.user_id)
-    
-    return StaffResponse(
-        id=staff.id,
-        employee_code=staff.employee_code,
-        first_name=staff.first_name,
-        last_name=staff.last_name,
-        email=staff.email,
-        phone=staff.phone,
-        department_id=staff.department_id,
-        designation_id=staff.designation_id,
-        reporting_manager_id=staff.reporting_manager_id,
-        employment_type=staff.employment_type,
-        join_date=staff.join_date,
-        work_location=staff.work_location,
-        user_id=staff.user_id,
-        exit_date=staff.exit_date,
-        exit_reason=staff.exit_reason,
-        skills=staff.skills or [],
-        is_active=staff.is_active,
-        full_name=f"{staff.first_name} {staff.last_name}",
-        created_at=staff.created_at,
-        updated_at=staff.updated_at,
-        designation_name=designation.name if designation else None,
-        department_name=department.name if department else None,
-        role_id=role_id.role_id if role_id else None
-    )
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    return await staff_service.get_staff_data(db, staff_id, tenant_id)
 
 
 @router.put("/{staff_id:uuid}", response_model=StaffResponse)
@@ -540,12 +504,13 @@ async def update_staff(
     request: Request,
     staff_id: UUID,
     staff_data: StaffUpdate,
+    profile_image: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db_session)
 ):
     """Update a staff member."""
     user_id = getattr(request.state, 'user_id', None)
-    tenant_id = getattr(request.state, 'tenant_id', None)
-    staff = await staff_crud.get(db, staff_id)
+    tenant_id = getattr(request.state, 'tenant_id', None)           
+    staff = await get_staff(db, staff_id, tenant_id)
     
     if not staff:
         raise HTTPException(
@@ -554,6 +519,10 @@ async def update_staff(
         )
     staff_dict = staff_data.model_dump()
     role_id = staff_dict.pop("role_id", None)
+    if profile_image:
+        profile_image_path = await save_image(profile_image)
+        staff_dict["profile_image"] = profile_image_path
+    
     # Update staff
     updated_staff = await staff_crud.update(
         db,
@@ -562,7 +531,6 @@ async def update_staff(
     )
     
     # Assign Role (Tenant Scoped)
-    print("Role ID to assign:", role_id)
     if role_id:
         user_role = await tenant_user_role_crud.get_by_field(db, field="user_id", value=staff.user_id)
         user_role.role_id = role_id
@@ -592,12 +560,14 @@ async def update_staff(
     )
 
     logger.info(f"Staff updated: {updated_staff.id}")
-    
+    await cache_utils.delete_staff(staff.id, tenant_id)
+    await cache_utils.get_or_set_all_staff_base_data(db, tenant_id)
     return StaffResponse(
         id=updated_staff.id,
         employee_code=updated_staff.employee_code,
         first_name=updated_staff.first_name,
         last_name=updated_staff.last_name,
+        profile_image=updated_staff.profile_image,
         email=updated_staff.email,
         phone=updated_staff.phone,
         department_id=updated_staff.department_id,
@@ -643,7 +613,7 @@ async def delete_staff(
     
     await notify.notify_staff_remove(staff, tenant_id, user_id)
     logger.info(f"Staff deleted: {staff_id}")
-    
+    await cache_utils.delete_staff(staff_id, tenant_id)
     return SuccessResponse(message="Staff member deleted successfully")
 
 @router.get("/get-names")
@@ -655,7 +625,27 @@ async def get_staff_names(
     user_id = getattr(request.state, 'user_id', None)
     tenant_id = getattr(request.state, 'tenant_id', None)
 
-    # await cache_utils.get_or_set_all_staff_base_data(db, tenant_id)
-
     names = await staff_service.list_staff_names(db, user_id, tenant_id)
     return names
+
+@router.get("/profile-image/{filename}")
+async def get_profile_image(
+    request: Request,
+    filename: str
+    ):
+
+    file_path = os.path.join(IMAGE_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return FileResponse(file_path)
+
+@router.get("/{staff_id:uuid}/get_profile")
+async def get_profile(
+    request: Request,
+    staff_id: UUID,
+    common_db: AsyncSession = Depends(get_common_db),
+    db: AsyncSession = Depends(get_db_session)
+):
+    tenant_id = getattr(request.state, 'tenant_id', None)
+    return await staff_service.get_profile(db, common_db, staff_id, tenant_id)

@@ -267,7 +267,6 @@ class AuthService:
         """Get all permissions for a user in a tenant."""
         if not tenant_id:
             return []
-        print(f"db : {db} , user_id : {user_id } , tenant_id: {tenant_id}")
         # Get user's roles in tenant
         query = select(TenantUserRole).where(
             and_(
@@ -278,7 +277,6 @@ class AuthService:
         )
         result = await db.execute(query)
         user_roles = result.scalars().all()
-        print("permissions: ", user_roles)
         if not user_roles:
             return []
         

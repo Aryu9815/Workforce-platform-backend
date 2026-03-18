@@ -2,7 +2,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
-
 from app.models.common.tenant_ai_settings import TenantAISettings
 from app.ai.provider_factory import LLMProviderFactory
 from app.ai.prompts import PROMPTS
@@ -47,7 +46,6 @@ class AIMessageService:
             )
 
         template = PROMPTS[prompt_key]
-
         return template.format(**variables)
 
 
@@ -62,23 +60,19 @@ class AIMessageService:
         """
 
         settings = await self.get_tenant_settings(db, tenant_id)
-
         prompt = self.render_prompt(
             "professional_message",
             {"message": message}
         )
-
         llm_client = LLMProviderFactory.get_provider(
             provider_key=settings.provider,
             model=settings.model
         )
-
         generated_message = await llm_client.generate(
             prompt=prompt,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens
         )
-
         return generated_message
 
 
@@ -94,21 +88,17 @@ class AIMessageService:
         """
 
         settings = await self.get_tenant_settings(db, tenant_id)
-
         prompt = self.render_prompt(
             prompt_key,
             {"message": message}
         )
-
         llm_client = LLMProviderFactory.get_provider(
             provider_key=settings.provider,
             model=settings.model
         )
-
         generated_message = await llm_client.generate(
             prompt=prompt,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens
         )
-
         return generated_message

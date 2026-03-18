@@ -5,6 +5,7 @@ from app.services.crud import staff_crud
 import json
 from app.utils.decorators import redis_required
 from app.schemas import StaffResponse
+
 class CacheUtils:
 
     @property
@@ -49,7 +50,8 @@ class CacheUtils:
                 "name": f"{staff.first_name} {staff.last_name}",
                 "first_name": staff.first_name,
                 "last_name": staff.last_name,
-                "email": staff.email
+                "email": staff.email,
+                "profile_image": staff.profile_image,
             }
             for staff in staff_list
         ]
@@ -69,10 +71,17 @@ class CacheUtils:
         return staff_data.model_dump()
 
     @redis_required
-    async def set_user_notifications_cache(self, user_id: str, tenant_id: str, notification_data):
+    async def delete_staff(self, staff_id: UUID, tenant_id: UUID):
+        await self.redis_client.delete(f"staff:{tenant_id}:{staff_id}")
+        await self.redis_client.delete(f"tenant_staff_base:{tenant_id}")
+    
+    @redis_required
+    async def delete_all_staff(self, tenant_id: UUID):
+        await self.redis_client.delete(f"tenant_staff_base:{tenant_id}")
 
+    @redis_required
+    async def set_user_notifications_cache(self, user_id: str, tenant_id: str, notification_data):
         key = f"notifications:{tenant_id}:{user_id}"
-        print('set notifications', key)
         await self.redis_client.lpush(key,json.dumps(notification_data, default=str))
         # keep only last 50 notifications
         await self.redis_client.ltrim(key, 0, 49)
@@ -80,13 +89,38 @@ class CacheUtils:
     @redis_required
     async def get_user_notifications_cache(self, user_id: str, tenant_id: str):
         key = f"notifications:{tenant_id}:{user_id}"
-        print('get notifications', key)
         notifications = await self.redis_client.lrange(key, 0, 19)
-
         if notifications:
             return [json.loads(n) for n in notifications]
-
         return notifications
+
+    @redis_required
+    async def set_all_departments_cache(self, tenant_id: UUID, department_data):
+        tenant_set = f"departments:{tenant_id}"
+        await self.redis_client.hset(
+            tenant_set,
+            mapping=department_data
+        )
+    
+    @redis_required
+    async def set_all_designations_cache(self, tenant_id: UUID, department_data):
+        tenant_set = f"designations:{tenant_id}"
+        await self.redis_client.hset(
+            tenant_set,
+            mapping=department_data
+        )
+    
+    @redis_required
+    async def get_all_departments_cache(self, tenant_id: UUID):
+        tenant_set = f"departments:{tenant_id}"
+        cached_departments = await self.redis_client.hgetall(tenant_set)
+        return cached_departments
+    
+    @redis_required
+    async def get_all_designations_cache(self, tenant_id: UUID):
+        tenant_set = f"designations:{tenant_id}"
+        cached_designations = await self.redis_client.hgetall(tenant_set)
+        return cached_designations
 
 
 cache_utils = CacheUtils()

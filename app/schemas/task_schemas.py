@@ -98,7 +98,6 @@ class TaskCreate(TaskBase):
             DEFAULT_ROLE_DICT = ['assignee','reporter','tester']
             [DEFAULT_ROLE_DICT.remove(assignee.role) for assignee in self.assignees if assignee.role != 'collaborator']
         except Exception as e:
-            print(123213, str(e))
             raise ValueError(f"Invalid role: You can assign role (Assignee, Reporter, Tester) to one member only")
         return self
 

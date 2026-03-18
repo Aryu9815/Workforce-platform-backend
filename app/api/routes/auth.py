@@ -272,7 +272,6 @@ async def switch_tenant(
 ):
     """Switch to a different tenant and get new tokens."""
     user_id = getattr(request.state, 'common_id', None)
-    print("common_id in switch tenant:", user_id)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -299,7 +298,7 @@ async def switch_tenant(
     tenant = [t for t in user_tenants if str(t['id']) == tenant_id][0]
     
     # Revoke old tokens
-    # await auth_service.revoke_all_user_tokens(db, user_id)
+    await auth_service.revoke_all_user_tokens(db, user_id)
     
     # Create new tokens for the selected tenant
     user_agent = request.headers.get("User-Agent")
@@ -312,7 +311,6 @@ async def switch_tenant(
     )
     
     logger.info(f"User {user_id} switched to tenant {tenant_id}")
-    print("permissions in switch tenant:", permissions)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,

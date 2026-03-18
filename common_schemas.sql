@@ -94,3 +94,23 @@ CREATE TABLE IF NOT EXISTS public.push_subscriptions
     is_deleted boolean DEFAULT false,
     CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id)
 )
+
+CREATE TABLE tenant_ai_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    tenant_id UUID NOT NULL,
+
+    provider VARCHAR(50) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+
+    temperature FLOAT DEFAULT 0.7,
+    max_tokens INTEGER DEFAULT 1024,
+
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_tenant_ai_settings_tenant_id
+ON tenant_ai_settings (tenant_id);

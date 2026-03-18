@@ -1,12 +1,7 @@
-
-"""
-Pydantic schemas for API request/response validation.
-"""
-from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, field_validator
-
+from pydantic import field_validator
+from app.schemas.base_schema import TimestampSchema, BaseSchema
 from app.schemas.validators import (
     validate_name_field,
     validate_optional_str,
@@ -14,7 +9,7 @@ from app.schemas.validators import (
 )
 
 
-class DesignationCreate(BaseModel):
+class DesignationCreate(BaseSchema):
     name: str
     level: Optional[int] = None
     department_id: Optional[UUID] = None
@@ -37,7 +32,7 @@ class DesignationCreate(BaseModel):
         return validate_positive_number(value, field='level', is_optional=True)
 
 
-class DesignationUpdate(BaseModel):
+class DesignationUpdate(BaseSchema):
     name: Optional[str] = None
     level: Optional[int] = None
     department_id: Optional[UUID] = None
@@ -66,12 +61,10 @@ class DesignationUpdate(BaseModel):
     def validate_level(cls, value):
         return validate_positive_number(value, field='level', is_optional=True)
 
-class DesignationResponse(BaseModel):
+class DesignationResponse(BaseSchema, TimestampSchema):
     id: UUID
     name: str
     level: Optional[int] = None
     department_id: Optional[UUID] = None
     description: Optional[str] = None
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    is_active: Optional[bool] = None

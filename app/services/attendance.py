@@ -9,39 +9,37 @@ from app.services.crud import (
     leave_crud,
     holiday_crud,
     attendance_crud,
-    shift_crud ,
-    staff_crud
+    shift_crud
 )
 from app.services.task_work_service import task_work_service
+from app.utils.db_utils import get_staff
 
 class AttendanceService:
 
     def __init__(self):
         pass
 
-
-    # ==========================================================
     # CHECK IN
-    # ==========================================================
     async def check_in(
         self,
         db: AsyncSession,
         staff_id: UUID,
         user_id: UUID,
+        tenant_id: UUID,
         location: dict | None = None,
     ):
 
         now = datetime.now(timezone.utc)
         today = now.date()
 
-        # 1️⃣ Check holiday
+        # Check holiday
         holiday = await holiday_crud.get_by_fields(
             db, fields ={"date": today}
         )
         if holiday:
             raise HTTPException(400, "Today is a holiday")
 
-        # 2️⃣ Check approved leave
+        # Check approved leave
         leave = await leave_crud.get_by_fields(
             db,
             fields=
@@ -54,7 +52,7 @@ class AttendanceService:
         if leave:
             raise HTTPException(400, "Staff is on approved leave")
 
-        # 3️⃣ Prevent duplicate check-in
+        # Prevent duplicate check-in
         existing = await attendance_crud.get_by_fields(
             db,
            fields= {"staff_id": staff_id, "date": today},
@@ -62,8 +60,8 @@ class AttendanceService:
         if existing:
             raise HTTPException(409, "Already checked in today")
 
-        # 4️⃣ Fetch shift
-        shift = await self._get_staff_shift(db, staff_id)
+        # Fetch shift
+        shift = await self._get_staff_shift(db, staff_id, tenant_id)
 
         status = "present"
 
@@ -95,14 +93,13 @@ class AttendanceService:
 
         return record
 
-    # ==========================================================
     # CHECK OUT
-    # ==========================================================
     async def check_out(
         self,
         db: AsyncSession,
         staff_id: UUID,
         user_id: UUID,
+        tenant_id: UUID,
         location: dict | None = None,
         notes: str | None = None,
     ):
@@ -126,7 +123,7 @@ class AttendanceService:
         if record.check_out:
             raise HTTPException(409, "Already checked out")
 
-        shift = await self._get_staff_shift(db, staff_id)
+        shift = await self._get_staff_shift(db, staff_id, tenant_id)
 
         await task_work_service.end_day(
             db=db,
@@ -142,15 +139,7 @@ class AttendanceService:
         if notes:
             record.notes = notes
 
-        # Calculate work hours
-        # duration = now - record.check_in
-        # work_hours = round(duration.total_seconds() / 3600, 2)
         work_hours = float(record.work_hours or 0)
-        # record.work_hours = Decimal(str(work_hours))
-        # --------------------------------------------------
-        # 1️⃣ Close all open task sessions first
-        # --------------------------------------------------
-
         # Half Day
         if work_hours < 4:
             record.status = "half_day"
@@ -173,14 +162,11 @@ class AttendanceService:
         await db.refresh(record)
         return record
 
-    # ==========================================================
-    # PRIVATE HELPERS
-    # ==========================================================
-
     async def _get_staff_shift(
         self,
         db: AsyncSession,
         staff_id: UUID,
+        tenant_id: UUID
     ) -> Shift | None:
         """
         Fetch active shift assigned to staff.
@@ -190,8 +176,8 @@ class AttendanceService:
         - today is working day
         """
 
-        # 1️⃣ Fetch staff
-        staff = await staff_crud.get(db, staff_id)
+        # Fetch staff
+        staff = await get_staff(db, staff_id, tenant_id)
 
         if not staff:
             raise HTTPException(404, "Staff not found")
@@ -199,20 +185,17 @@ class AttendanceService:
         if not getattr(staff, "shift_id", None):
             return None
 
-        # 2️⃣ Fetch shift (CRUD already filters is_active & is_deleted)
+        # Fetch shift
         shift = await shift_crud.get(
             db,
             staff.shift_id,
             include_deleted=False,
             include_inactive=False,
         )
-
         if not shift:
             return None
         
-
         now = datetime.now(timezone.utc)
-
         if shift.is_night_shift:
             # If before 5 AM, treat as previous working day
             if now.hour < 5:
@@ -224,10 +207,7 @@ class AttendanceService:
 
         if shift.days_of_week and weekday not in shift.days_of_week:
             return None  # Not scheduled today
-        # Monday = 0 ... Sunday = 6
-
         
-
         return shift
 
     def _calculate_shift_hours(self, shift: Shift) -> float:

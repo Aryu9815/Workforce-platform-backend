@@ -20,6 +20,7 @@ from app.services.crud import (
 from datetime import datetime, timezone, date, timedelta
 from sqlalchemy import or_
 from app.utils.cache_utils import cache_utils
+from app.utils.db_utils import get_staff
 
 class NotificationService:
 
@@ -207,16 +208,10 @@ class NotificationService:
         )
         message = f"The sprint {sprint.sprint_number} has been ended. Please move your open issues to appropriate state."
         for member in members:
-            staff = await cache_utils.get_or_set_staff(db, member.staff_id, tenant_id)
-            if staff:
-                staff_user_id = staff['user_id']
-                staff_id = staff['staff_id']
-                staff_email = staff['email']
-            else:
-                staff = await staff_crud.get(db, member.staff_id)
-                staff_user_id = staff.user_id
-                staff_id = staff.id
-                staff_email = staff.email
+            staff = await get_staff(db, member.staff_id, tenant_id)
+            staff_user_id = staff.user_id
+            staff_id = staff.id
+            staff_email = staff.email
             
             notification = await self.create_notification(
                 data={
@@ -323,17 +318,11 @@ class NotificationService:
 
         staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
         for assignee in task_assignees:
-            staff = await cache_utils.get_or_set_staff(db, assignee.staff_id, tenant_id)
-            if staff:
-                staff_user_id = staff['user_id']
-                staff_first_name = staff['first_name']
-                staff_email = staff['email']
-            else:
-                staff = await staff_crud.get(db, assignee.staff_id)
-                staff_first_name = staff.first_name
-                staff_user_id = staff.user_id
-                staff_email = staff.email
-            
+            staff = await get_staff(db, assignee.staff_id, tenant_id)            
+            staff_first_name = staff.first_name
+            staff_user_id = staff.user_id
+            staff_email = staff.email
+        
             message = f'You have been assigned a task {task.ticket_code}-{task.ticket_number}'
             if assignee.is_primary:
                 message += " as a collaborator"
@@ -392,12 +381,8 @@ class NotificationService:
             fields={'project_id': project.id, 'is_removed': False}
         )
         for member in members:
-            staff = await cache_utils.get_or_set_staff(db, member.staff_id, tenant_id)
-            if staff:
-                staff_user_id = staff['user_id']
-            else:
-                staff = await staff_crud.get(db, member.staff_id)
-                staff_user_id = staff.user_id
+            staff = await get_staff(db, member.staff_id, tenant_id)
+            staff_user_id = staff.user_id
             
             await self.create_notification(
                 data={
@@ -417,12 +402,8 @@ class NotificationService:
         from_state = await workflow_state_crud.get(db, transition.from_state_id)
         to_state = await workflow_state_crud.get(db, transition.to_state_id)
         for member in members:
-            staff = await cache_utils.get_or_set_staff(db, member.staff_id, tenant_id)
-            if staff:
-                staff_user_id = staff['user_id']
-            else:
-                staff = await staff_crud.get(db, member.staff_id)
-                staff_user_id = staff.user_id
+            staff = await get_staff(db, member.staff_id, tenant_id)
+            staff_user_id = staff.user_id
         
             await self.create_notification(
                 data={
@@ -435,18 +416,11 @@ class NotificationService:
 
     async def notify_project_member(self, db: AsyncSession, member: ProjectMember, tenant_id: str, user_id: str, is_removed: bool= False):
         project = await project_crud.get(db, member.project_id)
-        staff = await cache_utils.get_or_set_staff(db, member.staff_id, tenant_id)
-        if staff:
-            staff_user_id = staff['user_id']
-            staff_first_name = staff['first_name']
-            staff_last_name = staff['last_name']
-            staff_email = staff['email']
-        else:
-            staff = await staff_crud.get(db, member.staff_id)
-            staff_user_id = staff.user_id
-            staff_first_name = staff.first_name
-            staff_last_name = staff.last_name
-            staff_email = staff.email
+        staff = await get_staff(db, member.staff_id, tenant_id)
+        staff_user_id = staff.user_id
+        staff_first_name = staff.first_name
+        staff_last_name = staff.last_name
+        staff_email = staff.email
             
         staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
         if is_removed:
@@ -513,16 +487,10 @@ class NotificationService:
                     'is_primary': True
                 }
             )
-            staff = await cache_utils.get_or_set_staff(db, assignee[0].staff_id, tenant_id)
-            if staff:
-                staff_user_id = staff['user_id']
-                staff_first_name = staff['first_name']
-                staff_email = staff['email']
-            else:
-                staff = await staff_crud.get(db, assignee[0].staff_id)
-                staff_user_id = staff.user_id
-                staff_first_name = staff.first_name
-                staff_email = staff.email
+            staff = await get_staff(db, assignee[0].staff_id, tenant_id)
+            staff_user_id = staff.user_id
+            staff_first_name = staff.first_name
+            staff_email = staff.email
             
             notification = await notify.create_notification(
                 data={

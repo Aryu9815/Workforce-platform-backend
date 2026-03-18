@@ -3,10 +3,7 @@ Main FastAPI application entry point.
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-import redis.asyncio as redis
-import logging
 from starlette.middleware import Middleware
 from app.core.config import settings
 from app.core.logging_config import setup_logging, get_logger
@@ -49,9 +46,6 @@ loggers = setup_logging()
 logger = get_logger(__name__)
 
 
-# Redis client (initialized in lifespan)
-# redis_client = None
-
 scheduler = AsyncIOScheduler()
 scheduler_started = False
 
@@ -69,34 +63,34 @@ async def lifespan(app: FastAPI):
     if not success:
         logger.warning("Redis connection failed. Running without caching.")
     
-    # ✅ START SCHEDULER HERE
-    # scheduler.add_job(
-    #     monthly_accrual_job,
-    #     trigger="cron",
-    #     day=1,
-    #     hour=0,
-    #     minute=5,
-    # )
-    # scheduler.add_job(process_pending_jobs, "interval", seconds=10)
-    # scheduler.add_job(
-    #     notification_cleaner,
-    #     "cron",
-    #     hour=2,
-    # )
-    # scheduler.add_job(
-    #     task_alert_job,
-    #     trigger="cron",
-    #     hour=10,
-    #     minute=0,
-    # )
-    # scheduler.start()
-    # logger.info("Scheduler started")
+    # START SCHEDULER HERE
+    scheduler.add_job(
+        monthly_accrual_job,
+        trigger="cron",
+        day=1,
+        hour=0,
+        minute=5,
+    )
+    scheduler.add_job(process_pending_jobs, "interval", seconds=10)
+    scheduler.add_job(
+        notification_cleaner,
+        "cron",
+        hour=2,
+    )
+    scheduler.add_job(
+        task_alert_job,
+        trigger="cron",
+        hour=10,
+        minute=0,
+    )
+    scheduler.start()
+    logger.info("Scheduler started")
     yield
     
     # Shutdown
-    # logger.info("Shutting down application")
-    # scheduler.shutdown()
-    # logger.info("Scheduler stopped")
+    logger.info("Shutting down application")
+    scheduler.shutdown()
+    logger.info("Scheduler stopped")
 
     # Close database connections
     await db_manager.close()

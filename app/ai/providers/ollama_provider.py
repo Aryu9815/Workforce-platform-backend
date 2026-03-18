@@ -1,5 +1,4 @@
 from fastapi import HTTPException, status
-
 import httpx
 from app.ai.providers.base import BaseLLMProvider
 
@@ -22,16 +21,13 @@ class OllamaProvider(BaseLLMProvider):
             "temperature": temperature,
             "stream": False
         }
-
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 f"{self.base_url}/api/generate",
                 json=payload
             )
-
         if response.status_code != 200:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ollama request failed")
 
         data = response.json()
-
         return data.get("response", "").strip()

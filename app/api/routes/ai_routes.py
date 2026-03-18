@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.base import get_db_session , get_common_db
-
+from app.db.base import get_common_db
 from app.schemas.ai_schemas import (
     GenerateMessageRequest,
     GenerateMessageResponse
@@ -11,11 +10,9 @@ from app.services.ai_message_service import AIMessageService
 from app.core.logging_config import get_logger
 
 logger = get_logger(__name__)
-
 router = APIRouter(prefix="/ai", tags=["AI"])
 
 ai_service = AIMessageService()
-
 
 @router.get("/models")
 async def list_llm_models():

@@ -24,6 +24,7 @@ from app.core.logging_config import get_logger
 from app.services import notify
 from app.utils.rbac_middleware import require_permissions
 from app.core.constants import CLAIM_NOT_FOUND
+from app.utils.db_utils import get_staff
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/reimbursements", tags=["Reimbursement Management"])
@@ -46,6 +47,7 @@ async def list_reimbursement_claims(
 ):
     """List reimbursement claims with filtering."""
     permissions = getattr(request.state, "permissions", [])
+    tenant_id = getattr(request.state, 'tenant_id', None)
     filters = {}
     if staff_id and "reimbursement:view:all" not in permissions:
         filters["staff_id"] = staff_id
@@ -89,7 +91,7 @@ async def list_reimbursement_claims(
             )
             for item in items
         ]
-        staff = await staff_crud.get(db, claim.staff_id)
+        staff = await get_staff(db, claim.staff_id, tenant_id)
         claim_responses.append(ReimbursementClaimResponse(
             id=claim.id,
             claim_number=claim.claim_number,
@@ -388,7 +390,7 @@ async def approve_reimbursement_claim(
             'message': f"You have {claim.status} the reimbursement claim {claim.claim_number}.",
             }
         )
-    staff = await staff_crud.get(db, claim.staff_id)
+    staff = await get_staff(db, claim.staff_id, tenant_id)
     staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
 
     await notify.create_notification(
@@ -466,7 +468,7 @@ async def mark_reimbursement_paid(
             'message': f"You have {claim.status} the reimbursement claim {claim.claim_number}.",
             }
         )
-    staff = await staff_crud.get(db, claim.staff_id)
+    staff = await get_staff(db, claim.staff_id, tenant_id)
     staff_by = await staff_crud.get_by_field(db, field="user_id", value=user_id)
 
     await notify.create_notification(

@@ -88,9 +88,9 @@ class DepartmentResponse(BaseSchema, TimestampSchema):
     """Department response schema."""
     id: UUID
     name: str 
-    code: Optional[str]
+    code: Optional[str] = None
     description: Optional[str] = None
     parent_id: Optional[UUID] = None
     head_id: Optional[UUID] = None
-    is_active: bool
-    staff_count: int = 0
+    is_active: Optional[bool] = None
+    staff_count: Optional[int] = 0

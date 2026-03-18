@@ -142,7 +142,6 @@ async def create_task(
     """Create a new task."""
     tenant_id = getattr(request.state, 'tenant_id', None)
     user_id = getattr(request.state, 'user_id', None)
-    print("create task",user_id)
     task, assignee = await task_service.create_task(
         db,
         user_id=user_id,

@@ -32,6 +32,7 @@ CREATE TABLE tenant_users (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
+    audit_log JSON DEFAULT '[]'::json
 );
 
 
@@ -56,6 +57,7 @@ CREATE TABLE permissions (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 3.2.2 roles
@@ -73,6 +75,7 @@ CREATE TABLE roles (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
+    audit_log JSON DEFAULT '[]'::json
 );
 
 
@@ -90,6 +93,7 @@ CREATE TABLE role_permissions (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255)
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 3.2.4 tenant_user_roles
@@ -109,7 +113,8 @@ CREATE TABLE tenant_user_roles (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
-
+    audit_log JSON DEFAULT '[]'::json
+    
     UNIQUE (user_id, role_id, project_id)
 );
 
@@ -129,6 +134,7 @@ CREATE TABLE field_permissions (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 
     UNIQUE (role_id, entity_type, field_name)
 );
@@ -152,7 +158,8 @@ CREATE TABLE departments (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- Add foreign key after staff_profiles is created
@@ -173,7 +180,8 @@ CREATE TABLE designations (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 4.3 staff_profiles
@@ -183,6 +191,7 @@ CREATE TABLE staff_profiles (
     employee_code VARCHAR(50),
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
+    profile_image VARCHAR(255)
     email VARCHAR(255) NOT NULL,
     phone VARCHAR(20),
     department_id UUID NOT NULL REFERENCES departments(id) ON DELETE RESTRICT,
@@ -193,6 +202,7 @@ CREATE TABLE staff_profiles (
     exit_date DATE,
     exit_reason VARCHAR(100),
     work_location VARCHAR(100),
+    shift_id UUID,
     skills JSONB DEFAULT '[]'::jsonb,
     certifications JSONB DEFAULT '[]'::jsonb,
     emergency_contact JSONB,
@@ -205,28 +215,47 @@ CREATE TABLE staff_profiles (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
--- 4.4 staff_assignments
-CREATE TABLE staff_assignments (
+CREATE TABLE staff_leave_balances(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    staff_id UUID NOT NULL REFERENCES staff_profiles(id) ON DELETE CASCADE,
-    project_id UUID NOT NULL,
-    role VARCHAR(100),
-    allocation_percentage INT DEFAULT 100,
-    start_date DATE NOT NULL,
-    end_date DATE,
-    is_primary BOOLEAN DEFAULT FALSE,
-    assigned_by UUID NOT NULL ,
+    staff_id UUID NOT NULL,
+    leave_type_id UUID NOT NULL,
+    year INTEGER NOT NULL,
+    allocated_days NUMERIC(5,2) DEFAULT 0,
+    used_days NUMERIC(5,2) DEFAULT 0,
+    remaining_days NUMERIC(5,2) DEFAULT 0,
 
-    -- TenantScopedMixin
+    -- TenantScopedMixin fields
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSONB DEFAULT '[]'
+
+);
+
+
+CREATE TABLE leave_accrual_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    status VARCHAR(20) DEFAULT 'completed',
+    processed_at TIMESTAMPTZ DEFAULT now(),
+
+    -- TenantScopedMixin fields
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSONB DEFAULT '[]'
+
 );
 
 -- ============================================
@@ -252,7 +281,8 @@ CREATE TABLE attendance_policies (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 5.2 shifts
@@ -271,7 +301,8 @@ CREATE TABLE shifts (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 5.3 attendance_records
@@ -292,6 +323,7 @@ CREATE TABLE attendance_records (
     notes TEXT,
     is_manual_entry BOOLEAN DEFAULT FALSE,
     approved_by UUID,
+    task_time_log JSON DEFAULT '[]'::json;
 
     -- TenantScopedMixin
     is_active BOOLEAN DEFAULT TRUE,
@@ -300,6 +332,7 @@ CREATE TABLE attendance_records (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 
     UNIQUE (staff_id, date)
 );
@@ -322,7 +355,8 @@ CREATE TABLE leave_types (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 5.5 leave_requests
@@ -346,7 +380,8 @@ CREATE TABLE leave_requests (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 5.6 holidays
@@ -364,32 +399,13 @@ CREATE TABLE holidays (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- ============================================
 -- 6. PROJECT & TASK MANAGEMENT
 -- ============================================
-
--- 7.5 statuses (needed before projects)
-CREATE TABLE statuses (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    entity_type VARCHAR(50) NOT NULL,
-    color VARCHAR(7) NOT NULL,
-    icon VARCHAR(50),
-    order_index INT DEFAULT 0,
-    is_default BOOLEAN DEFAULT FALSE,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
 
 -- 7.1 workflows (needed before projects)
 CREATE TABLE workflows (
@@ -407,7 +423,8 @@ CREATE TABLE workflows (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 CREATE TABLE workflow_states (
@@ -429,7 +446,8 @@ CREATE TABLE workflow_states (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 CREATE TABLE workflow_transitions (
@@ -450,7 +468,8 @@ CREATE TABLE workflow_transitions (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 CREATE TABLE transition_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -465,7 +484,8 @@ CREATE TABLE transition_rules (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 CREATE TABLE sprints (
@@ -484,7 +504,8 @@ CREATE TABLE sprints (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 6.1 projects
@@ -520,7 +541,8 @@ CREATE TABLE projects (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 6.2 project_members
@@ -540,7 +562,8 @@ CREATE TABLE project_members (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 6.3 tasks
@@ -575,7 +598,8 @@ CREATE TABLE tasks (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 6.4 task_assignees
@@ -595,28 +619,9 @@ CREATE TABLE task_assignees (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
-
-    UNIQUE (task_id, staff_id)
+    audit_log JSON DEFAULT '[]'::json
 );
 
--- 6.5 task_dependencies
-CREATE TABLE task_dependencies (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    depends_on_task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    dependency_type VARCHAR(20) DEFAULT 'finish_to_start',
-    lag_days INT DEFAULT 0,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255),
-
-    UNIQUE (task_id, depends_on_task_id)
-);
 
 CREATE TABLE task_comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -632,32 +637,36 @@ CREATE TABLE task_comments (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
+CREATE TABLE task_labels (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL,
+    label VARCHAR(50) NOT NULL,
+    description VARCHAR(200),
+    color VARCHAR(20) DEFAULT '#CCCCCC',
 
--- 15.1 files (needed before task_attachments)
-CREATE TABLE files (
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSONB DEFAULT '[]',
+);
+
+CREATE TABLE task_work_sessions(
+
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    original_name VARCHAR(255) NOT NULL,
-    storage_key VARCHAR(500) NOT NULL UNIQUE,
-    file_size INT NOT NULL,
-    mime_type VARCHAR(100) NOT NULL,
-    extension VARCHAR(20),
-    checksum VARCHAR(64),
-    storage_provider VARCHAR(20) DEFAULT 's3',
-    bucket_name VARCHAR(100),
-
-    uploaded_by UUID NOT NULL,
-    entity_type VARCHAR(50),
-    entity_id UUID,
-
-    is_public BOOLEAN DEFAULT FALSE,
-    access_count INT DEFAULT 0,
-    last_accessed_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ,
-
-    metadata JSONB DEFAULT '{}'::jsonb,
+    attendance_id UUID NOT NULL,
+    task_id UUID NOT NULL,
+    staff_id UUID NOT NULL,
+    check_in TIMESTAMPTZ NOT NULL,
+    check_out TIMESTAMPTZ NULL,
+    duration_hours NUMERIC(5,2) NULL,
+    sequence INTEGER NOT NULL,
 
     -- TenantScopedMixin fields
     is_active BOOLEAN DEFAULT TRUE,
@@ -665,27 +674,9 @@ CREATE TABLE files (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSONB DEFAULT '[]'
 );
-
--- 6.6 task_attachments
-CREATE TABLE task_attachments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    uploaded_by UUID NOT NULL,
-    description TEXT NOT NULL,
-
-    -- TenantScopedMixin fields
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
-
 -- ============================================
 -- 9. FINANCIAL MODULES
 -- ============================================
@@ -708,7 +699,8 @@ CREATE TABLE expense_categories (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 9.1.2 reimbursement_claims
@@ -742,7 +734,8 @@ CREATE TABLE reimbursement_claims (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
 );
 
 -- 9.1.3 reimbursement_items
@@ -771,276 +764,12 @@ CREATE TABLE reimbursement_items (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
-
--- ============================================
--- 10. INVENTORY MODULE
--- ============================================
-
--- 10.1 inventory_categories
-CREATE TABLE inventory_categories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    code VARCHAR(20),
-    description TEXT,
-    parent_id UUID REFERENCES inventory_categories(id) ON DELETE SET NULL,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
--- 10.2 inventory_locations
-CREATE TABLE inventory_locations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    code VARCHAR(20),
-    description TEXT,
-    location_type VARCHAR(50) NOT NULL,
-    address JSONB,
-    manager_id UUID REFERENCES staff_profiles(id) ON DELETE SET NULL,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
--- 10.3 inventory_items
-CREATE TABLE inventory_items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku VARCHAR(100) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    category_id UUID NOT NULL REFERENCES inventory_categories(id) ON DELETE RESTRICT,
-    unit_of_measure VARCHAR(50) NOT NULL,
-    barcode VARCHAR(100),
-    manufacturer VARCHAR(100),
-    model_number VARCHAR(100),
-    cost_price NUMERIC(12,2),
-    selling_price NUMERIC(12,2),
-    reorder_level INT DEFAULT 0,
-    reorder_quantity INT DEFAULT 0,
-    is_trackable BOOLEAN DEFAULT TRUE,
-    is_consumable BOOLEAN DEFAULT TRUE,
-    custom_fields JSONB DEFAULT '{}'::jsonb,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
     updated_by VARCHAR(255),
-
-    UNIQUE (sku)
-);
-
--- 10.4 inventory_stock
-CREATE TABLE inventory_stock (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    item_id UUID NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
-    location_id UUID NOT NULL REFERENCES inventory_locations(id) ON DELETE CASCADE,
-    quantity_on_hand INT DEFAULT 0,
-    quantity_reserved INT DEFAULT 0,
-    average_cost NUMERIC(12,2),
-    last_movement_at TIMESTAMPTZ,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255),
-
-    UNIQUE (item_id, location_id)
-);
-
--- 10.5 inventory_transactions
-CREATE TABLE inventory_transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    transaction_number VARCHAR(50) NOT NULL UNIQUE,
-    item_id UUID NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
-    location_id UUID NOT NULL REFERENCES inventory_locations(id) ON DELETE CASCADE,
-    transaction_type VARCHAR(30) NOT NULL,
-    quantity INT NOT NULL,
-    unit_cost NUMERIC(12,2),
-    total_cost NUMERIC(15,2),
-    reference_type VARCHAR(50),
-    reference_id UUID,
-    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-    task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
-    staff_id UUID REFERENCES staff_profiles(id) ON DELETE SET NULL,
-    notes TEXT,
-    performed_by UUID ,
-    transaction_date TIMESTAMPTZ DEFAULT NOW(),
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
--- ============================================
--- 11. APPROVAL ENGINE
--- ============================================
-
--- 11.1 approval_flows
-CREATE TABLE approval_flows (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    entity_type VARCHAR(50) NOT NULL,
-    is_default BOOLEAN DEFAULT FALSE,
-    conditions JSONB,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
--- 11.2 approval_steps
-CREATE TABLE approval_steps (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    flow_id UUID NOT NULL REFERENCES approval_flows(id) ON DELETE CASCADE,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    order_index INT NOT NULL,
-    approver_type VARCHAR(30) NOT NULL,
-    approver_id UUID,
-    approver_role_id UUID REFERENCES roles(id) ON DELETE SET NULL,
-    is_parallel BOOLEAN DEFAULT FALSE,
-    minimum_approvals INT DEFAULT 1,
-    sla_hours INT,
-    escalation_step_id UUID REFERENCES approval_steps(id) ON DELETE SET NULL,
-    conditions JSONB,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
--- 11.3 approval_instances
-CREATE TABLE approval_instances (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    flow_id UUID NOT NULL REFERENCES approval_flows(id) ON DELETE CASCADE,
-    entity_type VARCHAR(50) NOT NULL,
-    entity_id UUID NOT NULL,
-    requester_id UUID NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending',
-    current_step_id UUID REFERENCES approval_steps(id) ON DELETE SET NULL,
-    started_at TIMESTAMPTZ DEFAULT NOW(),
-    completed_at TIMESTAMPTZ,
-    final_decision VARCHAR(20),
-    comments TEXT,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
--- 11.4 approval_assignments
-CREATE TABLE approval_assignments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    instance_id UUID NOT NULL REFERENCES approval_instances(id) ON DELETE CASCADE,
-    step_id UUID NOT NULL REFERENCES approval_steps(id) ON DELETE CASCADE,
-    approver_id UUID NOT NULL,
-    status VARCHAR(20) DEFAULT 'pending',
-    assigned_at TIMESTAMPTZ DEFAULT NOW(),
-    due_at TIMESTAMPTZ,
-    decided_at TIMESTAMPTZ,
-    comments TEXT,
-    delegated_from UUID ,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
--- ============================================
--- 13. AUDIT & LOGGING
--- ============================================
-
--- 13.1 audit_logs
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID,
-    impersonated_by UUID,
-    action VARCHAR(50) NOT NULL,
-    resource_type VARCHAR(50) NOT NULL,
-    resource_id UUID NOT NULL,
-    before_state JSONB,
-    after_state JSONB,
-    changes JSONB,
-    ip_address INET,
-    user_agent VARCHAR(500),
-    session_id VARCHAR(100),
-    request_id VARCHAR(100),
-    metadata JSONB,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
+    audit_log JSON DEFAULT '[]'::json
 );
 
 
--- 13.2 domain_events
-CREATE TABLE domain_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_type VARCHAR(100) NOT NULL,
-    aggregate_type VARCHAR(50) NOT NULL,
-    aggregate_id UUID NOT NULL,
-    payload JSONB NOT NULL,
-    metadata JSONB,
-    correlation_id VARCHAR(100),
-    causation_id UUID,
-    published BOOLEAN DEFAULT FALSE,
-    published_at TIMESTAMPTZ,
-
-    -- TenantScopedMixin
-    is_active BOOLEAN DEFAULT TRUE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    created_by VARCHAR(255) NOT NULL,
-    updated_by VARCHAR(255)
-);
-
-
-
-CREATE TABLE IF NOT EXISTS public.notifications
+CREATE TABLE notifications
 (
     id uuid NOT NULL,
     tenant_id uuid NOT NULL,
@@ -1050,6 +779,97 @@ CREATE TABLE IF NOT EXISTS public.notifications
     entity_type text COLLATE pg_catalog."default",
     entity_id uuid,
     is_read boolean DEFAULT false,
-    created_at timestamp without time zone DEFAULT now(),
+
+    -- TenantScopedMixin
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json,
+
     CONSTRAINT notifications_pkey PRIMARY KEY (id)
 )
+
+
+--assets
+
+CREATE TABLE asset_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    description TEXT,
+
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
+);
+
+
+CREATE TABLE asset_types (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id UUID NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    brand VARCHAR(100),
+    model_number VARCHAR(100),
+    tag_prefix VARCHAR(20) NOT NULL,
+    next_tag_number BIGINT NOT NULL DEFAULT 1,
+    is_serialized BOOLEAN DEFAULT TRUE,
+    purchase_cost NUMERIC(12,2),
+    warranty_months INTEGER,
+    description TEXT,
+
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
+);
+
+
+CREATE TABLE assets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    asset_type_id UUID NOT NULL,
+    asset_tag VARCHAR(100) NOT NULL UNIQUE,
+    serial_number VARCHAR(150),
+    status VARCHAR(30) DEFAULT 'available',
+    purchase_date DATE,
+    purchase_price NUMERIC(12,2),
+    location VARCHAR(150),
+    notes TEXT,
+
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
+);
+
+
+CREATE TABLE asset_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    asset_id UUID NOT NULL,
+    staff_id UUID NOT NULL,
+    assigned_date DATE NOT NULL,
+    expected_return_date DATE,
+    returned_date DATE,
+    condition_on_assign VARCHAR(50),
+    condition_on_return VARCHAR(50),
+
+    is_active BOOLEAN DEFAULT TRUE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(255),
+    audit_log JSON DEFAULT '[]'::json
+);

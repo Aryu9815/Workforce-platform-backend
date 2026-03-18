@@ -1,21 +1,8 @@
-"""
-SQLAlchemy models for all database entities.
-"""
 import uuid
-from datetime import datetime
-from typing import Optional, List
-from sqlalchemy import (
-    Column, String, Text, DateTime, Date, Time, Boolean, Integer, 
-    Numeric, ForeignKey, Index, UniqueConstraint, CheckConstraint,
-    ARRAY, JSON
-)
-from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
-from sqlalchemy.orm import relationship, declared_attr
+from sqlalchemy import Column, DateTime, Boolean
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-
-from app.db.base import Base
 from app.db.db_connection import TenantScopedMixin, TenantBase
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 class TenantUser(TenantBase, TenantScopedMixin):
     """Junction table for users and tenants."""

@@ -1,6 +1,4 @@
-import os
 from fastapi import HTTPException, status
-
 from app.ai.providers.openai_provider import OpenAIProvider
 from app.ai.providers.ollama_provider import OllamaProvider
 from app.core.constants import AVAILABLE_PROVIDERS , OPENAI_API_KEY, OLLAMA_BASE_URL
@@ -12,7 +10,6 @@ class LLMProviderFactory:
     def get_provider(provider_key: str, model: str):
 
         provider_key = provider_key.lower()
-
         if provider_key not in AVAILABLE_PROVIDERS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -27,9 +24,7 @@ class LLMProviderFactory:
 
         # OPENAI
         if provider_key == "openai":
-
             api_key = OPENAI_API_KEY
-
             if not api_key:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -43,9 +38,7 @@ class LLMProviderFactory:
 
         # OLLAMA
         if provider_key == "ollama":
-
             base_url = OLLAMA_BASE_URL
-
             return OllamaProvider(
                 base_url=base_url,
                 model=model

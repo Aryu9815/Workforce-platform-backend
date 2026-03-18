@@ -47,3 +47,6 @@ DESIGNATION_ID = 'designations.id'
 TASK_ID = 'tasks.id'
 
 ASIA_KOLKATA = 'Asia/Kolkata'
+
+
+IMAGE_DIR = "backend/assets/member_local_images"

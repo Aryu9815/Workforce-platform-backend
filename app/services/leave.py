@@ -12,6 +12,7 @@ from app.services.crud import(
     holiday_crud,leave_type_crud, leave_accrual_log_crud as accrual_log_crud,
     staff_crud
 )
+from app.utils.db_utils import get_staff
 
 class LeaveService:
 
@@ -58,10 +59,10 @@ class LeaveService:
             leave.approval_notes = "Unpaid Leave - Payroll Deduction Applicable"
             leave.is_payroll_deducted = True
 
-    async def _adjust_attendance(self, db, leave, approver_id):
+    async def _adjust_attendance(self, db, leave, approver_id, tenant_id):
         shift = await shift_crud.get(
             db,
-            (await staff_crud.get(db, leave.staff_id)).shift_id
+            (await get_staff(db, leave.staff_id, tenant_id)).shift_id
         )
         current_date = leave.start_date
         while current_date <= leave.end_date:
@@ -115,6 +116,7 @@ class LeaveService:
         leave_id: UUID,
         approver_id: UUID,
         approval_status: str,
+        tenant_id: UUID,
         notes: str | None = None,
     ):
 
@@ -125,7 +127,7 @@ class LeaveService:
             await self._adjust_leave_balance(db, leave)
 
             # Create attendance entries
-            await self._adjust_attendance(db, leave, approver_id)
+            await self._adjust_attendance(db, leave, approver_id, tenant_id)
 
         # 5️⃣ Update leave record
         leave.status = approval_status

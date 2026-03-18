@@ -7,8 +7,9 @@ from app.services.workflow import workflow_service
 from app.services.team import team_service
 from app.schemas import ProjectCreate, CreateProjectMember, ProjectUpdate, ProjectResponse, PaginationParams
 from datetime import datetime, timedelta, timezone
-from app.services.crud import project_crud, staff_crud, sprint_crud
+from app.services.crud import project_crud, sprint_crud
 from app.core.constants import PROJECT_NOT_FOUND
+from app.utils.db_utils import get_staff
 
 class ProjectService:
 
@@ -153,7 +154,8 @@ class ProjectService:
     async def get_project(
         self,
         db: AsyncSession,
-        project_id: str
+        project_id: str,
+        tenant_id: str
     ):
         """
         Get a specific project by ID.
@@ -166,7 +168,7 @@ class ProjectService:
                 detail=PROJECT_NOT_FOUND
             )
 
-        manager = await staff_crud.get(db, project.project_manager_id)
+        manager = await get_staff(db, project.project_manager_id, tenant_id)
         result = await db.execute(
             select(
                 ProjectMember.id,

@@ -33,6 +33,7 @@ from app.services import (
     notify
 )
 from app.utils.rbac_middleware import require_permissions
+from app.utils.db_utils import get_staff
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/attendance", tags=["Attendance Management"])
@@ -49,7 +50,7 @@ async def list_attendance(
     db: AsyncSession = Depends(get_db_session)
 ):
     """List attendance records with filtering."""
-    
+    tenant_id = getattr(request.state, 'tenant_id', None)
     filters = {}
     extra_conditions=[]
     if staff_id:
@@ -73,7 +74,7 @@ async def list_attendance(
     )
     record_responses = []
     for record in records:
-        staff = await staff_crud.get(db, record.staff_id)
+        staff = await get_staff(db, record.staff_id, tenant_id)
         record_responses.append(AttendanceRecordResponse(
             id=record.id,
             staff_id=record.staff_id,
@@ -116,6 +117,7 @@ async def check_in(
         staff_id=staff_id,
         user_id=user_id,
         location=location,
+        tenant_id=tenant_id
     )
 
     
@@ -164,6 +166,7 @@ async def check_out(
         user_id=user_id,
         location=location,
         notes=notes,
+        tenant_id=tenant_id
     )
    
     logger.info(f"Staff {staff_id} checked out")
@@ -208,6 +211,7 @@ async def list_leave_requests(
 ):
     """List leave requests with filtering."""
     user_permissions = getattr(request.state, "permissions", [])
+    tenant_id = getattr(request.state, 'tenant_id', None)
     filters = {}
     if staff_id and "leave:view:all" not in user_permissions:
         filters["staff_id"] = staff_id 
@@ -223,7 +227,7 @@ async def list_leave_requests(
     )
     leave_responses = []
     for leave in leaves:
-        staff = await staff_crud.get(db, leave.staff_id)
+        staff = await get_staff(db, leave.staff_id, tenant_id)
         leave_type = await leave_type_crud.get(db, leave.leave_type_id)
         leave_responses.append(LeaveRequestResponse(
             id=leave.id,
@@ -335,11 +339,12 @@ async def approve_leave(
         leave_id=leave_id,
         approver_id=user_id,
         approval_status=approval_data.status,
-        notes=approval_data.approval_notes
+        notes=approval_data.approval_notes,
+        tenant_id=tenant_id
     )
     logger.info(f"Leave request {leave_id} {approval_data.status}")
 
-    staff = await staff_crud.get(db, leave.staff_id)
+    staff = await get_staff(db, leave.staff_id, tenant_id)
     await notify.create_notification(
         data={
             'tenant_id':str(tenant_id),
@@ -461,12 +466,12 @@ async def get_attendance_record(
     db: AsyncSession = Depends(get_db_session)
 ):
     """Get attendance record details."""
-    
+    tenant_id = getattr(request.state, 'tenant_id', None)
     record = await attendance_crud.get(db, attendance_id)
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     
-    staff = await staff_crud.get(db, record.staff_id)
+    staff = await get_staff(db, record.staff_id, tenant_id)
     task_work = await task_work_service.get_sessions_by_attendance(db, record.id)
     return AttendanceRecordDetailResponse(
         id=record.id,

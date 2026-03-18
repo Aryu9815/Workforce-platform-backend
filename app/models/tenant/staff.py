@@ -40,6 +40,7 @@ class StaffProfile(TenantBase, TenantScopedMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=True)
     employee_code = Column(String(50), nullable=True)
+    profile_image = Column(String(255), nullable=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), nullable=False)
@@ -58,6 +59,7 @@ class StaffProfile(TenantBase, TenantScopedMixin):
     documents = Column(JSONB, default=list)
     custom_fields = Column(JSONB, default=dict)
     shift_id = Column(UUID(as_uuid=True), ForeignKey("shifts.id", ondelete=SET_NULL), nullable=True)
+
 class StaffLeaveBalance(TenantBase, TenantScopedMixin):
     __tablename__ = "staff_leave_balances"
 
@@ -75,17 +77,3 @@ class StaffLeaveBalance(TenantBase, TenantScopedMixin):
         UniqueConstraint("staff_id", "leave_type_id", "year"),
     )
     
-
-class StaffAssignment(TenantBase, TenantScopedMixin):
-    """Staff project assignments."""
-    __tablename__ = "staff_assignments"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    staff_id = Column(UUID(as_uuid=True), ForeignKey(STAFF_PROFILE_ID, ondelete="CASCADE"), nullable=False)
-    project_id = Column(UUID(as_uuid=True), nullable=False)  # Will be FK to projects
-    role = Column(String(100), nullable=True)
-    allocation_percentage = Column(Integer, default=100)
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=True)
-    is_primary = Column(Boolean, default=False)
-    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

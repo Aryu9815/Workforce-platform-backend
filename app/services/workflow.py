@@ -188,7 +188,6 @@ class WorkflowService:
         for transition in transitions:
             from_state = await workflow_state_crud.get(db, transition.from_state_id)
             to_state = await workflow_state_crud.get(db, transition.to_state_id)
-            print(from_state.name, to_state.name)
             updated_transitions.append(
                 WorkflowTransitionResponse(
                     id=transition.id,

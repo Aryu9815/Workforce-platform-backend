@@ -27,7 +27,8 @@ from app.schemas import (
 )
 from app.utils.rbac_middleware import require_permissions
 from app.services import notify
-
+from app.utils.cache_utils import cache_utils
+from app.utils.db_utils import get_staff
 logger = get_logger(__name__)
 router = APIRouter(prefix="/assets", tags=["Asset Management"])
 
@@ -337,7 +338,7 @@ async def assign_asset(
     if asset.status != "available":
         raise HTTPException(400, "Asset not available")
 
-    staff = await staff_crud.get(db, data.staff_id)
+    staff = await get_staff(db, data.staff_id, tenant_id=getattr(request.state, "tenant_id", None))
     if not staff or not staff.is_active:
         raise HTTPException(400, "Invalid staff")
 
@@ -410,7 +411,7 @@ async def get_asset_history(
     asset_id: UUID,
     db: AsyncSession = Depends(get_db_session),
 ):
-
+    tenant_id = getattr(request.state, "tenant_id", None)
     # 🔹 Get Asset
     asset = await asset_crud.get(db, asset_id)
     if not asset:
@@ -434,12 +435,13 @@ async def get_asset_history(
     current_assignment = None
 
     for a in assignments:
-        staff = await staff_crud.get(db, a.staff_id)
-
+        staff = await get_staff(db, a.staff_id, tenant_id)
+        staff_name = staff['first_name'] + " " + staff['last_name']
+        
         item = AssignmentHistoryItem(
             id=a.id,
             staff_id=a.staff_id,
-            staff_name=staff.first_name + " " + staff.last_name if staff else "Unknown",
+            staff_name=staff_name,
             assigned_date=a.assigned_date,
             expected_return_date=a.expected_return_date,
             returned_date=a.returned_date,

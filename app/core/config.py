@@ -105,4 +105,3 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
-print(f"setting Database URL >>>>>>>{settings.DATABASE_URL}")
